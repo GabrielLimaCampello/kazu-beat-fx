@@ -7,16 +7,16 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Kazu Beat FX" />
-  <meta name="description" content="Editor pessoal de overlays reativos ao kick." />
+  <meta name="description" content="Editor pessoal de ondas reativas ao kick com máscara de profundidade." />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=2.1.0" />
   <title>Kazu Beat FX</title>
 </head>
 <body>
   <header class="topbar">
     <div>
-      <p class="eyebrow">SRKAZU LAB</p>
+      <p class="eyebrow">SRKAZU LAB · V2.1</p>
       <h1>Kazu Beat FX</h1>
     </div>
     <button id="installBtn" class="ghost hidden" type="button">Instalar</button>
@@ -27,12 +27,11 @@
       <div class="preview-shell">
         <canvas id="preview" width="1280" height="720" aria-label="Prévia do projeto"></canvas>
         <div id="emptyState" class="empty-state">
-          <strong>Adicione um vídeo</strong>
-          <span>Depois importe a música e o PNG das ondas.</span>
+          <strong>Adicione o vídeo principal</strong>
+          <span>Depois pinte uma máscara sobre o personagem e o texto.</span>
         </div>
-        <div class="meter-wrap" aria-hidden="true">
-          <div id="meter" class="meter"></div>
-        </div>
+        <div class="layer-badge">VÍDEO → ONDA MASCARADA → PNG OPCIONAL</div>
+        <div class="meter-wrap" aria-hidden="true"><div id="meter" class="meter"></div></div>
       </div>
 
       <div class="transport">
@@ -45,99 +44,14 @@
 
     <section class="grid">
       <article class="card panel">
-        <h2>1. Arquivos</h2>
-        <label class="file-field">
-          <span>Vídeo principal</span>
+        <h2>1. Vídeo e áudio</h2>
+        <label class="file-field emphasized">
+          <span>Vídeo completo</span>
           <input id="videoInput" type="file" accept="video/*" />
         </label>
         <label class="file-field">
           <span>Música separada <small>(opcional)</small></span>
           <input id="audioInput" type="file" accept="audio/*" />
-        </label>
-        <label class="file-field">
-          <span>Imagem PNG do efeito</span>
-          <input id="overlayInput" type="file" accept="image/png,image/webp,image/jpeg" />
-        </label>
-        <p class="hint">Sem música separada, o app analisa o áudio do próprio vídeo.</p>
-      </article>
-
-      <article class="card panel">
-        <div class="panel-title-row">
-          <h2>2. Reação ao kick</h2>
-          <label class="switch">
-            <input id="reactiveEnabled" type="checkbox" checked />
-            <span></span>
-          </label>
-        </div>
-
-        <label class="control">
-          <span>Frequência mínima <output id="lowHzOut">35 Hz</output></span>
-          <input id="lowHz" type="range" min="20" max="180" value="35" step="1" />
-        </label>
-        <label class="control">
-          <span>Frequência máxima <output id="highHzOut">140 Hz</output></span>
-          <input id="highHz" type="range" min="60" max="300" value="140" step="1" />
-        </label>
-        <label class="control">
-          <span>Gate de silêncio <output id="thresholdOut">18%</output></span>
-          <input id="threshold" type="range" min="0" max="80" value="18" step="1" />
-        </label>
-        <label class="control">
-          <span>Sensibilidade <output id="sensitivityOut">2.2×</output></span>
-          <input id="sensitivity" type="range" min="50" max="500" value="220" step="5" />
-        </label>
-        <label class="control">
-          <span>Attack <output id="attackOut">18 ms</output></span>
-          <input id="attack" type="range" min="1" max="250" value="18" step="1" />
-        </label>
-        <label class="control">
-          <span>Release <output id="releaseOut">180 ms</output></span>
-          <input id="release" type="range" min="20" max="1000" value="180" step="5" />
-        </label>
-      </article>
-
-      <article class="card panel">
-        <h2>3. Aparência</h2>
-        <label class="control">
-          <span>Opacidade mínima <output id="minOpacityOut">0%</output></span>
-          <input id="minOpacity" type="range" min="0" max="100" value="0" step="1" />
-        </label>
-        <label class="control">
-          <span>Opacidade máxima <output id="maxOpacityOut">100%</output></span>
-          <input id="maxOpacity" type="range" min="0" max="100" value="100" step="1" />
-        </label>
-        <label class="control">
-          <span>Escala base <output id="baseScaleOut">100%</output></span>
-          <input id="baseScale" type="range" min="20" max="220" value="100" step="1" />
-        </label>
-        <label class="control">
-          <span>Zoom no kick <output id="scaleBoostOut">8%</output></span>
-          <input id="scaleBoost" type="range" min="0" max="60" value="8" step="1" />
-        </label>
-        <label class="control">
-          <span>Glow máximo <output id="glowOut">36 px</output></span>
-          <input id="glow" type="range" min="0" max="100" value="36" step="1" />
-        </label>
-        <label class="control">
-          <span>Rotação <output id="rotationOut">0°</output></span>
-          <input id="rotation" type="range" min="-180" max="180" value="0" step="1" />
-        </label>
-        <label class="control">
-          <span>Posição horizontal <output id="posXOut">50%</output></span>
-          <input id="posX" type="range" min="0" max="100" value="50" step="1" />
-        </label>
-        <label class="control">
-          <span>Posição vertical <output id="posYOut">50%</output></span>
-          <input id="posY" type="range" min="0" max="100" value="50" step="1" />
-        </label>
-        <label class="select-field">
-          <span>Mesclagem</span>
-          <select id="blendMode">
-            <option value="source-over">Normal</option>
-            <option value="screen" selected>Tela / Screen</option>
-            <option value="lighter">Adicionar luz</option>
-            <option value="overlay">Overlay</option>
-          </select>
         </label>
         <label class="select-field">
           <span>Ajuste do vídeo</span>
@@ -146,30 +60,138 @@
             <option value="contain">Encaixar</option>
           </select>
         </label>
+        <p class="hint">O vídeo pode estar totalmente achatado. A máscara informa ao app onde a onda não deve passar.</p>
+      </article>
+
+      <article class="card panel mask-panel">
+        <div class="panel-title-row">
+          <h2>2. Máscara “atrás dos elementos”</h2>
+          <label class="switch">
+            <input id="maskEnabled" type="checkbox" checked />
+            <span></span>
+          </label>
+        </div>
+        <button id="openMaskEditorBtn" class="primary" type="button" disabled>✦ Pintar personagem e texto</button>
+        <div class="two-buttons">
+          <label class="button-label compact">Importar máscara PNG<input id="maskInput" type="file" accept="image/png,image/webp" hidden /></label>
+          <button id="exportMaskBtn" class="ghost compact" type="button" disabled>Salvar máscara PNG</button>
+        </div>
+        <button id="clearMaskBtn" class="ghost compact danger" type="button" disabled>Limpar máscara</button>
+        <label class="control">
+          <span>Suavidade das bordas <output id="maskFeatherOut">8 px</output></span>
+          <input id="maskFeather" type="range" min="0" max="40" value="8" step="1" />
+        </label>
+        <label class="control">
+          <span>Margem de proteção <output id="maskExpandOut">5 px</output></span>
+          <input id="maskExpand" type="range" min="0" max="30" value="5" step="1" />
+        </label>
+        <div id="maskStatus" class="status">Nenhuma máscara criada. A onda ficará na frente de tudo.</div>
+        <p class="hint">Pinte de vermelho tudo que deve ficar na frente da onda: personagem, texto, logotipo e objetos importantes.</p>
       </article>
 
       <article class="card panel">
-        <h2>4. Projeto e exportação</h2>
+        <div class="panel-title-row">
+          <h2>3. Detector de kick</h2>
+          <label class="switch"><input id="reactiveEnabled" type="checkbox" checked /><span></span></label>
+        </div>
         <label class="select-field">
-          <span>Resolução</span>
-          <select id="resolution">
-            <option value="720" selected>1280 × 720</option>
-            <option value="1080">1920 × 1080</option>
+          <span>Modo de detecção</span>
+          <select id="detectorMode">
+            <option value="transient" selected>Kick seco / ataque</option>
+            <option value="energy">Grave contínuo</option>
           </select>
         </label>
+        <label class="control"><span>Frequência mínima <output id="lowHzOut">45 Hz</output></span><input id="lowHz" type="range" min="20" max="180" value="45" step="1" /></label>
+        <label class="control"><span>Frequência máxima <output id="highHzOut">100 Hz</output></span><input id="highHz" type="range" min="60" max="300" value="100" step="1" /></label>
+        <label class="control"><span>Gate de silêncio <output id="thresholdOut">18%</output></span><input id="threshold" type="range" min="0" max="80" value="18" step="1" /></label>
+        <label class="control"><span>Sensibilidade <output id="sensitivityOut">3.2×</output></span><input id="sensitivity" type="range" min="50" max="600" value="320" step="5" /></label>
+        <label class="control"><span>Attack <output id="attackOut">12 ms</output></span><input id="attack" type="range" min="1" max="250" value="12" step="1" /></label>
+        <label class="control"><span>Release <output id="releaseOut">145 ms</output></span><input id="release" type="range" min="20" max="1000" value="145" step="5" /></label>
+      </article>
+
+      <article class="card panel">
+        <div class="panel-title-row">
+          <h2>4. Onda fluida animada</h2>
+          <label class="switch"><input id="waveEnabled" type="checkbox" checked /><span></span></label>
+        </div>
+        <button id="fkuPresetBtn" class="ghost compact" type="button">Aplicar preset FKU</button>
+        <label class="select-field">
+          <span>Formato</span>
+          <select id="waveStyle">
+            <option value="contour" selected>Contornos topográficos</option>
+            <option value="horizontal">Ondas horizontais</option>
+          </select>
+        </label>
+        <label class="control"><span>Opacidade sem kick <output id="waveMinOpacityOut">2%</output></span><input id="waveMinOpacity" type="range" min="0" max="100" value="2" step="1" /></label>
+        <label class="control"><span>Opacidade no kick <output id="waveMaxOpacityOut">100%</output></span><input id="waveMaxOpacity" type="range" min="0" max="100" value="100" step="1" /></label>
+        <label class="control"><span>Velocidade da animação <output id="waveSpeedOut">0.9×</output></span><input id="waveSpeed" type="range" min="0" max="300" value="90" step="5" /></label>
+        <label class="control"><span>Quantidade de linhas <output id="waveCountOut">7</output></span><input id="waveCount" type="range" min="2" max="14" value="7" step="1" /></label>
+        <label class="control"><span>Deformação líquida <output id="waveDeformOut">46%</output></span><input id="waveDeform" type="range" min="0" max="100" value="46" step="1" /></label>
+        <label class="control"><span>Pulsação no kick <output id="wavePulseOut">14%</output></span><input id="wavePulse" type="range" min="0" max="60" value="14" step="1" /></label>
+        <label class="control"><span>Tamanho <output id="waveScaleOut">108%</output></span><input id="waveScale" type="range" min="35" max="180" value="108" step="1" /></label>
+        <label class="control"><span>Espessura <output id="waveThicknessOut">4 px</output></span><input id="waveThickness" type="range" min="1" max="16" value="4" step="1" /></label>
+        <label class="control"><span>Glow <output id="waveGlowOut">42 px</output></span><input id="waveGlow" type="range" min="0" max="100" value="42" step="1" /></label>
+        <label class="control"><span>Posição horizontal <output id="wavePosXOut">50%</output></span><input id="wavePosX" type="range" min="0" max="100" value="50" step="1" /></label>
+        <label class="control"><span>Posição vertical <output id="wavePosYOut">50%</output></span><input id="wavePosY" type="range" min="0" max="100" value="50" step="1" /></label>
+        <label class="color-field"><span>Cor da onda</span><input id="waveColor" type="color" value="#9b35ff" /></label>
+      </article>
+
+      <article class="card panel">
+        <h2>5. Primeiro plano adicional <small>(opcional)</small></h2>
+        <label class="file-field"><span>PNG transparente extra</span><input id="foregroundInput" type="file" accept="image/png,image/webp" /></label>
+        <label class="control"><span>Escala <output id="foregroundScaleOut">100%</output></span><input id="foregroundScale" type="range" min="20" max="220" value="100" step="1" /></label>
+        <label class="control"><span>Posição horizontal <output id="foregroundPosXOut">50%</output></span><input id="foregroundPosX" type="range" min="0" max="100" value="50" step="1" /></label>
+        <label class="control"><span>Posição vertical <output id="foregroundPosYOut">50%</output></span><input id="foregroundPosY" type="range" min="0" max="100" value="50" step="1" /></label>
+        <label class="control"><span>Rotação <output id="foregroundRotationOut">0°</output></span><input id="foregroundRotation" type="range" min="-180" max="180" value="0" step="1" /></label>
+        <label class="control"><span>Opacidade <output id="foregroundOpacityOut">100%</output></span><input id="foregroundOpacity" type="range" min="0" max="100" value="100" step="1" /></label>
+        <label class="control"><span>Zoom no kick <output id="foregroundKickZoomOut">2%</output></span><input id="foregroundKickZoom" type="range" min="0" max="30" value="2" step="1" /></label>
+      </article>
+
+      <article class="card panel">
+        <h2>6. Projeto e exportação</h2>
+        <label class="select-field">
+          <span>Resolução</span>
+          <select id="resolution"><option value="720" selected>1280 × 720</option><option value="1080">1920 × 1080</option></select>
+        </label>
         <div class="button-stack">
-          <button id="savePresetBtn" class="ghost" type="button">Salvar preset JSON</button>
-          <label class="button-label ghost">
-            Importar preset JSON
-            <input id="presetInput" type="file" accept="application/json,.json" hidden />
-          </label>
+          <button id="saveProjectBtn" class="ghost" type="button">Salvar projeto JSON + máscara</button>
+          <label class="button-label">Importar projeto JSON<input id="projectInput" type="file" accept="application/json,.json" hidden /></label>
           <button id="exportBtn" class="primary" type="button" disabled>Exportar vídeo</button>
         </div>
-        <div id="exportStatus" class="status">Adicione um vídeo para começar.</div>
+        <div id="exportStatus" class="status">Adicione o vídeo para começar.</div>
         <p class="hint">A exportação acontece em tempo real. Mantenha o app aberto e a tela ligada.</p>
       </article>
     </section>
   </main>
+
+  <dialog id="maskDialog" class="mask-dialog">
+    <div class="dialog-header">
+      <div>
+        <p class="eyebrow">EDITOR DE PROFUNDIDADE</p>
+        <h2>Pinte o que deve ficar na frente</h2>
+      </div>
+      <button id="closeMaskEditorBtn" class="ghost icon-btn" type="button" aria-label="Fechar">✕</button>
+    </div>
+    <p class="dialog-help">Use <strong>Proteger</strong> sobre personagem e texto. A área vermelha bloqueará a onda.</p>
+    <div class="mask-canvas-shell">
+      <canvas id="maskEditorCanvas" width="1280" height="720"></canvas>
+    </div>
+    <div class="mask-tools">
+      <div class="segmented">
+        <button id="maskDrawBtn" class="active" type="button">✎ Proteger</button>
+        <button id="maskEraseBtn" type="button">⌫ Apagar</button>
+      </div>
+      <label class="control wide"><span>Tamanho do pincel <output id="brushSizeOut">70 px</output></span><input id="brushSize" type="range" min="10" max="260" value="70" step="2" /></label>
+      <label class="check-field"><input id="showMaskOverlay" type="checkbox" checked /> Mostrar vermelho</label>
+      <div class="tool-grid">
+        <button id="maskUndoBtn" class="ghost compact" type="button">↶ Desfazer</button>
+        <button id="maskRedoBtn" class="ghost compact" type="button">↷ Refazer</button>
+        <button id="maskInvertBtn" class="ghost compact" type="button">Inverter</button>
+        <button id="maskClearEditorBtn" class="ghost compact danger" type="button">Limpar</button>
+      </div>
+      <button id="applyMaskBtn" class="primary" type="button">Aplicar máscara</button>
+    </div>
+  </dialog>
 
   <dialog id="installDialog">
     <h2>Instalar no iPhone</h2>
@@ -179,6 +201,6 @@
 
   <video id="videoEl" playsinline preload="metadata" hidden></video>
   <audio id="audioEl" preload="metadata" hidden></audio>
-  <script src="app.js" defer></script>
+  <script src="app.js?v=2.1.0" defer></script>
 </body>
 </html>

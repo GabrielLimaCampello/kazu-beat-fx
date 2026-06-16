@@ -1,7 +1,7 @@
 {
   "name": "Kazu Beat FX",
   "short_name": "Kazu Beat FX",
-  "description": "Editor pessoal de overlays que reagem ao kick.",
+  "description": "Editor pessoal de ondas reativas ao kick com máscara de profundidade.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
