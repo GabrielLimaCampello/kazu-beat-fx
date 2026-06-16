@@ -1,0 +1,15 @@
+{
+  "name": "Kazu Beat FX",
+  "short_name": "Kazu Beat FX",
+  "description": "Editor pessoal de overlays que reagem ao kick.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#07040c",
+  "theme_color": "#090510",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

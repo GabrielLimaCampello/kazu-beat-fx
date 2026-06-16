@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#090510" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Kazu Beat FX" />
+  <meta name="description" content="Editor pessoal de overlays reativos ao kick." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+  <title>Kazu Beat FX</title>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">SRKAZU LAB</p>
+      <h1>Kazu Beat FX</h1>
+    </div>
+    <button id="installBtn" class="ghost hidden" type="button">Instalar</button>
+  </header>
+
+  <main>
+    <section class="card hero">
+      <div class="preview-shell">
+        <canvas id="preview" width="1280" height="720" aria-label="Prévia do projeto"></canvas>
+        <div id="emptyState" class="empty-state">
+          <strong>Adicione um vídeo</strong>
+          <span>Depois importe a música e o PNG das ondas.</span>
+        </div>
+        <div class="meter-wrap" aria-hidden="true">
+          <div id="meter" class="meter"></div>
+        </div>
+      </div>
+
+      <div class="transport">
+        <button id="playBtn" class="primary" type="button" disabled>▶ Reproduzir</button>
+        <button id="stopBtn" class="ghost" type="button" disabled>■ Parar</button>
+        <span id="timeLabel" class="time">00:00 / 00:00</span>
+      </div>
+      <input id="seek" class="seek" type="range" min="0" max="1000" value="0" disabled aria-label="Linha do tempo" />
+    </section>
+
+    <section class="grid">
+      <article class="card panel">
+        <h2>1. Arquivos</h2>
+        <label class="file-field">
+          <span>Vídeo principal</span>
+          <input id="videoInput" type="file" accept="video/*" />
+        </label>
+        <label class="file-field">
+          <span>Música separada <small>(opcional)</small></span>
+          <input id="audioInput" type="file" accept="audio/*" />
+        </label>
+        <label class="file-field">
+          <span>Imagem PNG do efeito</span>
+          <input id="overlayInput" type="file" accept="image/png,image/webp,image/jpeg" />
+        </label>
+        <p class="hint">Sem música separada, o app analisa o áudio do próprio vídeo.</p>
+      </article>
+
+      <article class="card panel">
+        <div class="panel-title-row">
+          <h2>2. Reação ao kick</h2>
+          <label class="switch">
+            <input id="reactiveEnabled" type="checkbox" checked />
+            <span></span>
+          </label>
+        </div>
+
+        <label class="control">
+          <span>Frequência mínima <output id="lowHzOut">35 Hz</output></span>
+          <input id="lowHz" type="range" min="20" max="180" value="35" step="1" />
+        </label>
+        <label class="control">
+          <span>Frequência máxima <output id="highHzOut">140 Hz</output></span>
+          <input id="highHz" type="range" min="60" max="300" value="140" step="1" />
+        </label>
+        <label class="control">
+          <span>Gate de silêncio <output id="thresholdOut">18%</output></span>
+          <input id="threshold" type="range" min="0" max="80" value="18" step="1" />
+        </label>
+        <label class="control">
+          <span>Sensibilidade <output id="sensitivityOut">2.2×</output></span>
+          <input id="sensitivity" type="range" min="50" max="500" value="220" step="5" />
+        </label>
+        <label class="control">
+          <span>Attack <output id="attackOut">18 ms</output></span>
+          <input id="attack" type="range" min="1" max="250" value="18" step="1" />
+        </label>
+        <label class="control">
+          <span>Release <output id="releaseOut">180 ms</output></span>
+          <input id="release" type="range" min="20" max="1000" value="180" step="5" />
+        </label>
+      </article>
+
+      <article class="card panel">
+        <h2>3. Aparência</h2>
+        <label class="control">
+          <span>Opacidade mínima <output id="minOpacityOut">0%</output></span>
+          <input id="minOpacity" type="range" min="0" max="100" value="0" step="1" />
+        </label>
+        <label class="control">
+          <span>Opacidade máxima <output id="maxOpacityOut">100%</output></span>
+          <input id="maxOpacity" type="range" min="0" max="100" value="100" step="1" />
+        </label>
+        <label class="control">
+          <span>Escala base <output id="baseScaleOut">100%</output></span>
+          <input id="baseScale" type="range" min="20" max="220" value="100" step="1" />
+        </label>
+        <label class="control">
+          <span>Zoom no kick <output id="scaleBoostOut">8%</output></span>
+          <input id="scaleBoost" type="range" min="0" max="60" value="8" step="1" />
+        </label>
+        <label class="control">
+          <span>Glow máximo <output id="glowOut">36 px</output></span>
+          <input id="glow" type="range" min="0" max="100" value="36" step="1" />
+        </label>
+        <label class="control">
+          <span>Rotação <output id="rotationOut">0°</output></span>
+          <input id="rotation" type="range" min="-180" max="180" value="0" step="1" />
+        </label>
+        <label class="control">
+          <span>Posição horizontal <output id="posXOut">50%</output></span>
+          <input id="posX" type="range" min="0" max="100" value="50" step="1" />
+        </label>
+        <label class="control">
+          <span>Posição vertical <output id="posYOut">50%</output></span>
+          <input id="posY" type="range" min="0" max="100" value="50" step="1" />
+        </label>
+        <label class="select-field">
+          <span>Mesclagem</span>
+          <select id="blendMode">
+            <option value="source-over">Normal</option>
+            <option value="screen" selected>Tela / Screen</option>
+            <option value="lighter">Adicionar luz</option>
+            <option value="overlay">Overlay</option>
+          </select>
+        </label>
+        <label class="select-field">
+          <span>Ajuste do vídeo</span>
+          <select id="videoFit">
+            <option value="cover" selected>Preencher</option>
+            <option value="contain">Encaixar</option>
+          </select>
+        </label>
+      </article>
+
+      <article class="card panel">
+        <h2>4. Projeto e exportação</h2>
+        <label class="select-field">
+          <span>Resolução</span>
+          <select id="resolution">
+            <option value="720" selected>1280 × 720</option>
+            <option value="1080">1920 × 1080</option>
+          </select>
+        </label>
+        <div class="button-stack">
+          <button id="savePresetBtn" class="ghost" type="button">Salvar preset JSON</button>
+          <label class="button-label ghost">
+            Importar preset JSON
+            <input id="presetInput" type="file" accept="application/json,.json" hidden />
+          </label>
+          <button id="exportBtn" class="primary" type="button" disabled>Exportar vídeo</button>
+        </div>
+        <div id="exportStatus" class="status">Adicione um vídeo para começar.</div>
+        <p class="hint">A exportação acontece em tempo real. Mantenha o app aberto e a tela ligada.</p>
+      </article>
+    </section>
+  </main>
+
+  <dialog id="installDialog">
+    <h2>Instalar no iPhone</h2>
+    <p>No Safari, toque em <strong>Compartilhar</strong> e depois em <strong>Adicionar à Tela de Início</strong>.</p>
+    <button id="closeInstallDialog" class="primary" type="button">Entendi</button>
+  </dialog>
+
+  <video id="videoEl" playsinline preload="metadata" hidden></video>
+  <audio id="audioEl" preload="metadata" hidden></audio>
+  <script src="app.js" defer></script>
+</body>
+</html>
