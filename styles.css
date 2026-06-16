@@ -253,3 +253,84 @@ dialog p { color: var(--muted); line-height: 1.55; }
   .two-buttons, .tool-grid { grid-template-columns: 1fr 1fr; }
   .mask-dialog { padding: 12px; }
 }
+
+/* V3: Wave Motion em vídeo + desempenho */
+.section-kicker {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+.wave-panel { border-color: rgba(160, 76, 255, 0.30); }
+.wave-source-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.asset-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  border-radius: 999px;
+  background: rgba(83, 255, 157, 0.08);
+  color: #caffdc;
+  border: 1px solid rgba(83, 255, 157, 0.16);
+  font-size: 0.76rem;
+  font-weight: 760;
+}
+.asset-pill i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #42f58d;
+  box-shadow: 0 0 12px rgba(66, 245, 141, 0.9);
+}
+.color-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.color-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.color-chip {
+  width: 42px;
+  min-height: 42px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--chip);
+  border: 3px solid rgba(255,255,255,0.84);
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.09), 0 8px 22px color-mix(in srgb, var(--chip) 38%, transparent);
+}
+.advanced-controls {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 13px;
+  background: rgba(255,255,255,0.035);
+  padding: 0 12px;
+}
+.advanced-controls summary {
+  cursor: pointer;
+  padding: 13px 0;
+  color: #ded4e9;
+  font-weight: 720;
+}
+.advanced-controls[open] { padding-bottom: 14px; }
+.advanced-controls[open] summary { margin-bottom: 10px; }
+.advanced-controls .control + .control { margin-top: 13px; }
+
+/* Reduce expensive page compositing on iPhone. */
+.panel, .hero { contain: layout paint; }
+.meter { will-change: width; }
+@media (max-width: 760px) {
+  .card {
+    backdrop-filter: none;
+    box-shadow: 0 14px 34px rgba(0,0,0,0.20);
+  }
+  .color-grid { grid-template-columns: 1fr; }
+  .color-chip { width: 38px; min-height: 38px; }
+}

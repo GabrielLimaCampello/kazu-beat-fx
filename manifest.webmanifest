@@ -1,7 +1,7 @@
 {
   "name": "Kazu Beat FX",
   "short_name": "Kazu Beat FX",
-  "description": "Editor pessoal de ondas reativas ao kick com máscara de profundidade.",
+  "description": "Editor pessoal com Wave Motion em vídeo, reação ao kick, cores e máscara de profundidade.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -9,7 +9,17 @@
   "theme_color": "#090510",
   "orientation": "portrait-primary",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ]
 }

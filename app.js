@@ -7,12 +7,19 @@ const numeric = (element) => Number(element.value);
 const canvas = $('preview');
 const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
 const video = $('videoEl');
+const waveVideo = $('waveVideoEl');
 const audio = $('audioEl');
 
 const waveCanvas = document.createElement('canvas');
-const waveCtx = waveCanvas.getContext('2d');
+const waveCtx = waveCanvas.getContext('2d', { alpha: true, desynchronized: true });
+const waveSourceCanvas = document.createElement('canvas');
+const waveSourceCtx = waveSourceCanvas.getContext('2d', { alpha: false, desynchronized: true });
+const waveCoreCanvas = document.createElement('canvas');
+const waveCoreCtx = waveCoreCanvas.getContext('2d', { alpha: false, desynchronized: true });
 const maskedWaveCanvas = document.createElement('canvas');
-const maskedWaveCtx = maskedWaveCanvas.getContext('2d');
+const maskedWaveCtx = maskedWaveCanvas.getContext('2d', { alpha: true, desynchronized: true });
+const processedMaskCanvas = document.createElement('canvas');
+const processedMaskCtx = processedMaskCanvas.getContext('2d', { alpha: true });
 
 // The mask is deliberately smaller than the output to keep painting responsive on iPhone.
 const maskCanvas = document.createElement('canvas');
@@ -32,7 +39,7 @@ const ui = {
   emptyState: $('emptyState'), meter: $('meter'), playBtn: $('playBtn'), stopBtn: $('stopBtn'),
   timeLabel: $('timeLabel'), seek: $('seek'), exportBtn: $('exportBtn'), exportStatus: $('exportStatus'),
   videoInput: $('videoInput'), audioInput: $('audioInput'), foregroundInput: $('foregroundInput'),
-  videoFit: $('videoFit'), resolution: $('resolution'),
+  videoFit: $('videoFit'), resolution: $('resolution'), previewQuality: $('previewQuality'),
 
   maskEnabled: $('maskEnabled'), openMaskEditorBtn: $('openMaskEditorBtn'), maskInput: $('maskInput'),
   exportMaskBtn: $('exportMaskBtn'), clearMaskBtn: $('clearMaskBtn'), maskFeather: $('maskFeather'),
@@ -45,7 +52,8 @@ const ui = {
   waveMaxOpacity: $('waveMaxOpacity'), waveSpeed: $('waveSpeed'), waveCount: $('waveCount'),
   waveDeform: $('waveDeform'), wavePulse: $('wavePulse'), waveScale: $('waveScale'),
   waveThickness: $('waveThickness'), waveGlow: $('waveGlow'), wavePosX: $('wavePosX'),
-  wavePosY: $('wavePosY'), waveColor: $('waveColor'), fkuPresetBtn: $('fkuPresetBtn'),
+  wavePosY: $('wavePosY'), waveColor: $('waveColor'), waveCoreColor: $('waveCoreColor'),
+  waveThreshold: $('waveThreshold'), fkuPresetBtn: $('fkuPresetBtn'),
 
   foregroundScale: $('foregroundScale'), foregroundPosX: $('foregroundPosX'), foregroundPosY: $('foregroundPosY'),
   foregroundRotation: $('foregroundRotation'), foregroundOpacity: $('foregroundOpacity'),
@@ -78,6 +86,7 @@ const outputs = {
   waveScale: ['waveScaleOut', (v) => `${v}%`],
   waveThickness: ['waveThicknessOut', (v) => `${v} px`],
   waveGlow: ['waveGlowOut', (v) => `${v} px`],
+  waveThreshold: ['waveThresholdOut', (v) => `${v}%`],
   wavePosX: ['wavePosXOut', (v) => `${v}%`],
   wavePosY: ['wavePosYOut', (v) => `${v}%`],
   foregroundScale: ['foregroundScaleOut', (v) => `${v}%`],
@@ -111,6 +120,10 @@ let audioGain = null;
 let masterGain = null;
 let deferredInstallPrompt = null;
 let maskHasContent = false;
+let maskCacheDirty = true;
+let renderRequested = true;
+let animationFrameId = null;
+let lastRenderedAt = 0;
 let maskMode = 'draw';
 let isPainting = false;
 let previousMaskPoint = null;
@@ -149,18 +162,27 @@ function projectDuration() {
   return Math.max(0, Math.min(videoDuration, audioDuration));
 }
 
+function previewDimensions() {
+  if (exporting) return ui.resolution.value === '1080' ? [1920, 1080] : [1280, 720];
+  const mode = ui.previewQuality?.value || 'auto';
+  if (mode === 'economy') return [640, 360];
+  if (mode === 'high') return [1280, 720];
+  const lowPower = matchMedia('(max-width: 820px)').matches
+    || (navigator.deviceMemory && navigator.deviceMemory <= 4)
+    || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
+  return lowPower ? [640, 360] : [960, 540];
+}
+
 function setCanvasResolution() {
-  const dimensions = ui.resolution.value === '1080' ? [1920, 1080] : [1280, 720];
-  if (canvas.width !== dimensions[0] || canvas.height !== dimensions[1]) {
-    canvas.width = dimensions[0];
-    canvas.height = dimensions[1];
+  const dimensions = previewDimensions();
+  if (canvas.width === dimensions[0] && canvas.height === dimensions[1]) return;
+  canvas.width = dimensions[0];
+  canvas.height = dimensions[1];
+  for (const offscreen of [waveCanvas, waveSourceCanvas, waveCoreCanvas, maskedWaveCanvas, processedMaskCanvas]) {
+    offscreen.width = canvas.width;
+    offscreen.height = canvas.height;
   }
-  for (const offscreen of [waveCanvas, maskedWaveCanvas]) {
-    if (offscreen.width !== canvas.width || offscreen.height !== canvas.height) {
-      offscreen.width = canvas.width;
-      offscreen.height = canvas.height;
-    }
-  }
+  maskCacheDirty = true;
 }
 
 function fitRect(sourceWidth, sourceHeight, targetWidth, targetHeight, fit = 'cover') {
@@ -194,7 +216,7 @@ async function ensureAudioGraph() {
     if (!AudioContextClass) throw new Error('Web Audio não está disponível neste navegador.');
     audioContext = new AudioContextClass();
     analyser = audioContext.createAnalyser();
-    analyser.fftSize = 2048;
+    analyser.fftSize = 1024;
     analyser.smoothingTimeConstant = 0.25;
     frequencyData = new Uint8Array(analyser.frequencyBinCount);
     recordDestination = audioContext.createMediaStreamDestination();
@@ -326,19 +348,67 @@ function horizontalPath(targetCtx, index, count, time, pulseScale) {
   }
 }
 
-function drawWaveLayer() {
-  waveCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
-  if (!ui.waveEnabled.checked) return;
+function tintCanvas(sourceCtx, targetCtx, color) {
+  targetCtx.save();
+  targetCtx.globalCompositeOperation = 'multiply';
+  targetCtx.fillStyle = color;
+  targetCtx.fillRect(0, 0, targetCtx.canvas.width, targetCtx.canvas.height);
+  targetCtx.restore();
+}
 
-  const minimumOpacity = numeric(ui.waveMinOpacity) / 100;
-  const maximumOpacity = numeric(ui.waveMaxOpacity) / 100;
-  const opacity = minimumOpacity + (maximumOpacity - minimumOpacity) * envelope;
-  if (opacity <= 0.001) return;
+function drawVideoWaveLayer(opacity, pulseScale) {
+  if (waveVideo.readyState < 2 || !waveVideo.videoWidth) return false;
 
+  const sourceWidth = waveSourceCanvas.width;
+  const sourceHeight = waveSourceCanvas.height;
+  const scale = numeric(ui.waveScale) / 100 * pulseScale;
+  const width = sourceWidth * scale;
+  const height = sourceHeight * scale;
+  const x = sourceWidth * numeric(ui.wavePosX) / 100 - width / 2;
+  const y = sourceHeight * numeric(ui.wavePosY) / 100 - height / 2;
+  const threshold = numeric(ui.waveThreshold) / 100;
+  const contrast = 100 + threshold * 410;
+  const brightness = 100 + threshold * 80;
+
+  waveSourceCtx.save();
+  waveSourceCtx.fillStyle = '#000';
+  waveSourceCtx.fillRect(0, 0, sourceWidth, sourceHeight);
+  waveSourceCtx.filter = `contrast(${contrast}%) brightness(${brightness}%)`;
+  waveSourceCtx.drawImage(waveVideo, x, y, width, height);
+  waveSourceCtx.filter = 'none';
+  tintCanvas(waveSourceCtx, waveSourceCtx, ui.waveColor.value);
+  waveSourceCtx.restore();
+
+  waveCoreCtx.save();
+  waveCoreCtx.fillStyle = '#000';
+  waveCoreCtx.fillRect(0, 0, sourceWidth, sourceHeight);
+  waveCoreCtx.filter = `contrast(${Math.min(420, contrast + 105)}%) brightness(${Math.min(245, brightness + 45)}%)`;
+  waveCoreCtx.drawImage(waveVideo, x, y, width, height);
+  waveCoreCtx.filter = 'none';
+  tintCanvas(waveCoreCtx, waveCoreCtx, ui.waveCoreColor.value);
+  waveCoreCtx.restore();
+
+  const glow = numeric(ui.waveGlow) * (waveCanvas.width / 1280) * (0.35 + envelope * 0.65);
+  waveCtx.save();
+  waveCtx.globalCompositeOperation = 'screen';
+  waveCtx.globalAlpha = opacity * 0.86;
+  if (glow > 0.5) {
+    waveCtx.filter = `blur(${Math.min(42, glow)}px)`;
+    waveCtx.drawImage(waveSourceCanvas, 0, 0);
+  }
+  waveCtx.filter = 'none';
+  waveCtx.globalAlpha = opacity;
+  waveCtx.drawImage(waveSourceCanvas, 0, 0);
+  waveCtx.globalAlpha = opacity * 0.72;
+  waveCtx.drawImage(waveCoreCanvas, 0, 0);
+  waveCtx.restore();
+  return true;
+}
+
+function drawGeneratedWaveLayer(opacity, pulseScale) {
   const speed = numeric(ui.waveSpeed) / 100;
   const time = video.currentTime * speed;
   const count = Math.round(numeric(ui.waveCount));
-  const pulseScale = 1 + numeric(ui.wavePulse) / 100 * envelope;
   const outputScale = waveCanvas.width / 1280;
   const thickness = numeric(ui.waveThickness) * outputScale;
   const glow = numeric(ui.waveGlow) * outputScale * (0.34 + envelope * 0.66);
@@ -368,13 +438,51 @@ function drawWaveLayer() {
     else contourPath(waveCtx, index, count, time, pulseScale);
 
     waveCtx.globalAlpha = lineOpacity;
-    waveCtx.strokeStyle = `rgba(255, 247, 255, 0.98)`;
+    waveCtx.strokeStyle = ui.waveCoreColor.value;
     waveCtx.lineWidth = Math.max(1, thickness * 0.78);
     waveCtx.shadowColor = `rgba(${color.r}, ${color.g}, ${color.b}, 1)`;
     waveCtx.shadowBlur = glow * 0.48;
     waveCtx.stroke();
   }
   waveCtx.restore();
+}
+
+function drawWaveLayer() {
+  waveCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
+  if (!ui.waveEnabled.checked) return;
+
+  const minimumOpacity = numeric(ui.waveMinOpacity) / 100;
+  const maximumOpacity = numeric(ui.waveMaxOpacity) / 100;
+  const opacity = minimumOpacity + (maximumOpacity - minimumOpacity) * envelope;
+  if (opacity <= 0.001) return;
+
+  const pulseScale = 1 + numeric(ui.wavePulse) / 100 * envelope;
+  if (ui.waveStyle.value === 'video' && drawVideoWaveLayer(opacity, pulseScale)) return;
+  drawGeneratedWaveLayer(opacity, pulseScale);
+}
+function rebuildProcessedMask() {
+  processedMaskCtx.clearRect(0, 0, processedMaskCanvas.width, processedMaskCanvas.height);
+  if (!ui.maskEnabled.checked || !maskHasContent) {
+    maskCacheDirty = false;
+    return;
+  }
+
+  const scale = processedMaskCanvas.width / 1280;
+  const feather = numeric(ui.maskFeather) * scale;
+  const expand = numeric(ui.maskExpand) * scale;
+  const offsets = expand > 0
+    ? [[0, 0], [expand, 0], [-expand, 0], [0, expand], [0, -expand],
+      [expand * 0.72, expand * 0.72], [-expand * 0.72, expand * 0.72],
+      [expand * 0.72, -expand * 0.72], [-expand * 0.72, -expand * 0.72]]
+    : [[0, 0]];
+
+  processedMaskCtx.save();
+  processedMaskCtx.filter = feather > 0 ? `blur(${Math.min(30, feather)}px)` : 'none';
+  for (const [offsetX, offsetY] of offsets) {
+    processedMaskCtx.drawImage(maskCanvas, offsetX, offsetY, processedMaskCanvas.width, processedMaskCanvas.height);
+  }
+  processedMaskCtx.restore();
+  maskCacheDirty = false;
 }
 
 function applyMaskToWave() {
@@ -384,31 +492,13 @@ function applyMaskToWave() {
   maskedWaveCtx.drawImage(waveCanvas, 0, 0);
 
   if (!ui.maskEnabled.checked || !maskHasContent) return;
-
-  const scale = maskedWaveCanvas.width / 1280;
-  const feather = numeric(ui.maskFeather) * scale;
-  const expand = numeric(ui.maskExpand) * scale;
-  const offsets = expand > 0
-    ? [[0, 0], [expand, 0], [-expand, 0], [0, expand], [0, -expand],
-      [expand * 0.72, expand * 0.72], [-expand * 0.72, expand * 0.72],
-      [expand * 0.72, -expand * 0.72], [-expand * 0.72, -expand * 0.72]]
-    : [[0, 0]];
+  if (maskCacheDirty) rebuildProcessedMask();
 
   maskedWaveCtx.save();
   maskedWaveCtx.globalCompositeOperation = 'destination-out';
-  maskedWaveCtx.filter = feather > 0 ? `blur(${feather}px)` : 'none';
-  for (const [offsetX, offsetY] of offsets) {
-    maskedWaveCtx.drawImage(
-      maskCanvas,
-      offsetX,
-      offsetY,
-      maskedWaveCanvas.width,
-      maskedWaveCanvas.height
-    );
-  }
+  maskedWaveCtx.drawImage(processedMaskCanvas, 0, 0);
   maskedWaveCtx.restore();
 }
-
 function drawForeground() {
   if (!foregroundImage) return;
   const baseScale = numeric(ui.foregroundScale) / 100;
@@ -440,11 +530,22 @@ function drawForeground() {
   ctx.restore();
 }
 
-function render(now = performance.now()) {
-  const deltaSeconds = clamp((now - lastFrameTime) / 1000, 0.001, 0.1);
+function syncWaveVideo() {
+  if (ui.waveStyle.value !== 'video' || !Number.isFinite(waveVideo.duration) || waveVideo.duration <= 0) return;
+  const speed = numeric(ui.waveSpeed) / 100;
+  waveVideo.playbackRate = clamp(speed, 0.25, 2.5);
+  const target = (video.currentTime * speed) % waveVideo.duration;
+  const distance = Math.abs(waveVideo.currentTime - target);
+  const wrappedDistance = Math.min(distance, waveVideo.duration - distance);
+  if (!playing || wrappedDistance > 0.22) waveVideo.currentTime = target;
+}
+
+function renderFrame(now = performance.now()) {
+  const deltaSeconds = clamp((now - lastFrameTime) / 1000, 0.001, 0.12);
   lastFrameTime = now;
   setCanvasResolution();
   computeKick(deltaSeconds);
+  syncWaveVideo();
 
   drawVideoTo(ctx, canvas);
   drawWaveLayer();
@@ -471,10 +572,27 @@ function render(now = performance.now()) {
   if (playing && hasExternalAudio && Math.abs(audio.currentTime - video.currentTime) > 0.12) {
     audio.currentTime = video.currentTime;
   }
-
-  requestAnimationFrame(render);
 }
 
+function renderLoop(now) {
+  animationFrameId = null;
+  const continuous = playing || exporting;
+  const minimumFrameTime = exporting ? 31 : 33;
+  if (continuous && now - lastRenderedAt < minimumFrameTime) {
+    animationFrameId = requestAnimationFrame(renderLoop);
+    return;
+  }
+  if (!continuous && !renderRequested) return;
+  renderRequested = false;
+  lastRenderedAt = now;
+  renderFrame(now);
+  if (continuous || renderRequested) animationFrameId = requestAnimationFrame(renderLoop);
+}
+
+function requestRender() {
+  renderRequested = true;
+  if (!animationFrameId) animationFrameId = requestAnimationFrame(renderLoop);
+}
 function enableProjectControls() {
   ui.emptyState.classList.toggle('hidden', hasVideo);
   ui.playBtn.disabled = !hasVideo;
@@ -497,6 +615,7 @@ async function loadVideo(file) {
   video.currentTime = 0;
   enableProjectControls();
   updateAudioGains();
+  requestRender();
 }
 
 async function loadAudio(file) {
@@ -510,6 +629,7 @@ async function loadAudio(file) {
   hasExternalAudio = true;
   updateAudioGains();
   setStatus('Música separada carregada e sincronizada.', 'ok');
+  requestRender();
 }
 
 async function loadForeground(file) {
@@ -519,6 +639,7 @@ async function loadForeground(file) {
   await image.decode();
   foregroundImage = image;
   setStatus('PNG adicional carregado acima da onda.', 'ok');
+  requestRender();
 }
 
 function updateAudioGains() {
@@ -536,21 +657,26 @@ async function playProject() {
     video.currentTime = 0;
     if (hasExternalAudio) audio.currentTime = 0;
   }
+  syncWaveVideo();
+  const wavePromise = ui.waveStyle.value === 'video' ? waveVideo.play().catch(() => undefined) : Promise.resolve();
   if (hasExternalAudio) {
     audio.currentTime = video.currentTime;
-    await Promise.all([video.play(), audio.play()]);
+    await Promise.all([video.play(), audio.play(), wavePromise]);
   } else {
-    await video.play();
+    await Promise.all([video.play(), wavePromise]);
   }
   playing = true;
   ui.playBtn.textContent = 'Ⅱ Pausar';
+  requestRender();
 }
 
 function pauseProject() {
   video.pause();
   audio.pause();
+  waveVideo.pause();
   playing = false;
   ui.playBtn.textContent = '▶ Reproduzir';
+  requestRender();
 }
 
 function stopPlayback() {
@@ -558,6 +684,8 @@ function stopPlayback() {
   video.currentTime = 0;
   if (hasExternalAudio) audio.currentTime = 0;
   envelope = 0;
+  if (Number.isFinite(waveVideo.duration)) waveVideo.currentTime = 0;
+  requestRender();
 }
 
 // ---------- Mask editor ----------
@@ -571,6 +699,7 @@ function detectMaskContent() {
 
 function updateMaskStatus() {
   maskHasContent = detectMaskContent();
+  maskCacheDirty = true;
   ui.exportMaskBtn.disabled = !maskHasContent;
   ui.clearMaskBtn.disabled = !maskHasContent;
   if (maskHasContent) {
@@ -580,6 +709,7 @@ function updateMaskStatus() {
     ui.maskStatus.textContent = 'Nenhuma máscara criada. A onda ficará na frente de tudo.';
     ui.maskStatus.className = 'status';
   }
+  requestRender();
 }
 
 function currentMaskSnapshot() {
@@ -774,10 +904,11 @@ editorCanvas.addEventListener('pointerleave', () => {
 // ---------- Project JSON ----------
 function settingKeys() {
   return [
-    'videoFit', 'resolution', 'maskEnabled', 'maskFeather', 'maskExpand',
+    'videoFit', 'resolution', 'previewQuality', 'maskEnabled', 'maskFeather', 'maskExpand',
     'reactiveEnabled', 'detectorMode', 'lowHz', 'highHz', 'threshold', 'sensitivity', 'attack', 'release',
     'waveEnabled', 'waveStyle', 'waveMinOpacity', 'waveMaxOpacity', 'waveSpeed', 'waveCount',
-    'waveDeform', 'wavePulse', 'waveScale', 'waveThickness', 'waveGlow', 'wavePosX', 'wavePosY', 'waveColor',
+    'waveDeform', 'wavePulse', 'waveScale', 'waveThickness', 'waveGlow', 'waveThreshold', 'wavePosX', 'wavePosY',
+    'waveColor', 'waveCoreColor',
     'foregroundScale', 'foregroundPosX', 'foregroundPosY', 'foregroundRotation', 'foregroundOpacity',
     'foregroundKickZoom'
   ];
@@ -794,7 +925,7 @@ function collectSettings() {
 function collectProject() {
   return {
     app: 'Kazu Beat FX',
-    version: '2.1',
+    version: '3.0',
     createdAt: new Date().toISOString(),
     note: 'Os arquivos de vídeo e áudio não ficam dentro do JSON; selecione-os novamente.',
     settings: collectSettings(),
@@ -811,6 +942,8 @@ function applySettings(settings) {
   });
   updateOutputs();
   saveLocalSettings();
+  maskCacheDirty = true;
+  requestRender();
 }
 
 async function restoreMaskFromDataUrl(dataUrl) {
@@ -831,9 +964,10 @@ function applyFkuPreset() {
     videoFit: 'cover', maskEnabled: true, maskFeather: 8, maskExpand: 5,
     reactiveEnabled: true, detectorMode: 'transient', lowHz: 45, highHz: 100,
     threshold: 18, sensitivity: 320, attack: 12, release: 145,
-    waveEnabled: true, waveStyle: 'contour', waveMinOpacity: 2, waveMaxOpacity: 100,
-    waveSpeed: 90, waveCount: 7, waveDeform: 46, wavePulse: 14, waveScale: 108,
-    waveThickness: 4, waveGlow: 42, wavePosX: 50, wavePosY: 50, waveColor: '#9b35ff',
+    previewQuality: 'auto', waveEnabled: true, waveStyle: 'video', waveMinOpacity: 0, waveMaxOpacity: 100,
+    waveSpeed: 100, waveCount: 7, waveDeform: 46, wavePulse: 10, waveScale: 112,
+    waveThickness: 4, waveGlow: 28, waveThreshold: 12, wavePosX: 50, wavePosY: 50,
+    waveColor: '#8b35ff', waveCoreColor: '#ffffff',
     foregroundScale: 100, foregroundPosX: 50, foregroundPosY: 50,
     foregroundRotation: 0, foregroundOpacity: 100, foregroundKickZoom: 2
   });
@@ -842,7 +976,7 @@ function applyFkuPreset() {
 
 function saveLocalSettings() {
   try {
-    localStorage.setItem('kazuBeatFxSettingsV21', JSON.stringify({ settings: collectSettings() }));
+    localStorage.setItem('kazuBeatFxSettingsV30', JSON.stringify({ settings: collectSettings() }));
   } catch (_) {}
 }
 
@@ -880,7 +1014,10 @@ async function exportVideo() {
   try {
     await ensureAudioGraph();
     stopPlayback();
+    exporting = true;
     setCanvasResolution();
+    requestRender();
+    renderFrame(performance.now());
 
     const canvasStream = canvas.captureStream(30);
     const audioTracks = recordDestination.stream.getAudioTracks();
@@ -903,13 +1040,15 @@ async function exportVideo() {
       const type = mediaRecorder.mimeType || mimeType || 'video/webm';
       const extension = type.includes('mp4') ? 'mp4' : 'webm';
       const blob = new Blob(recordedChunks, { type });
-      downloadBlob(blob, `Kazu-Beat-FX-v2.1-${Date.now()}.${extension}`);
+      downloadBlob(blob, `Kazu-Beat-FX-v3-${Date.now()}.${extension}`);
       setStatus(`Exportação concluída (${(blob.size / 1024 / 1024).toFixed(1)} MB).`, 'ok');
       ui.exportBtn.disabled = false;
       ui.exportBtn.textContent = 'Exportar vídeo';
+      setCanvasResolution();
+      requestRender();
     };
 
-    exporting = true;
+
     ui.exportBtn.disabled = true;
     ui.exportBtn.textContent = 'Exportando…';
     setStatus('Exportando em tempo real. Não bloqueie a tela nem saia do app.');
@@ -917,6 +1056,8 @@ async function exportVideo() {
     await playProject();
   } catch (error) {
     exporting = false;
+    setCanvasResolution();
+    requestRender();
     ui.exportBtn.disabled = false;
     ui.exportBtn.textContent = 'Exportar vídeo';
     setStatus(`Não foi possível exportar: ${error.message}`, 'error');
@@ -955,6 +1096,8 @@ ui.seek.addEventListener('input', () => {
   const nextTime = duration * numeric(ui.seek) / 1000;
   video.currentTime = nextTime;
   if (hasExternalAudio) audio.currentTime = nextTime;
+  syncWaveVideo();
+  requestRender();
 });
 
 ui.openMaskEditorBtn.addEventListener('click', openMaskEditor);
@@ -976,17 +1119,41 @@ ui.showMaskOverlay.addEventListener('change', renderMaskEditor);
 ui.brushSize.addEventListener('input', () => { updateOutputs(); renderMaskEditor(); });
 
 ui.exportBtn.addEventListener('click', exportVideo);
-ui.resolution.addEventListener('change', setCanvasResolution);
+ui.resolution.addEventListener('change', () => { setCanvasResolution(); requestRender(); });
+ui.previewQuality.addEventListener('change', () => { setCanvasResolution(); requestRender(); });
 ui.fkuPresetBtn.addEventListener('click', applyFkuPreset);
 
 Object.entries(outputs).forEach(([key]) => {
-  if (ui[key] && key !== 'brushSize') ui[key].addEventListener('input', updateOutputs);
+  if (ui[key] && key !== 'brushSize') {
+    ui[key].addEventListener('input', () => {
+      updateOutputs();
+      if (key === 'maskFeather' || key === 'maskExpand') maskCacheDirty = true;
+      requestRender();
+    });
+  }
 });
-settingKeys().forEach((key) => ui[key].addEventListener('change', saveLocalSettings));
+settingKeys().forEach((key) => ui[key].addEventListener('change', () => {
+  saveLocalSettings();
+  if (key === 'maskEnabled' || key === 'maskFeather' || key === 'maskExpand') maskCacheDirty = true;
+  if (key === 'waveStyle' && playing) {
+    if (ui.waveStyle.value === 'video') waveVideo.play().catch(() => undefined);
+    else waveVideo.pause();
+  }
+  requestRender();
+}));
+
+document.querySelectorAll('.color-chip').forEach((button) => {
+  button.addEventListener('click', () => {
+    ui.waveColor.value = button.dataset.waveColor;
+    ui.waveCoreColor.value = button.dataset.coreColor;
+    saveLocalSettings();
+    requestRender();
+  });
+});
 
 ui.saveProjectBtn.addEventListener('click', () => {
   const blob = new Blob([JSON.stringify(collectProject(), null, 2)], { type: 'application/json' });
-  downloadBlob(blob, 'Kazu-Beat-FX-v2.1-Projeto.json');
+  downloadBlob(blob, 'Kazu-Beat-FX-v3-Projeto.json');
 });
 
 ui.projectInput.addEventListener('change', async (event) => {
@@ -1024,8 +1191,11 @@ ui.installBtn.addEventListener('click', async () => {
 ui.closeInstallDialog.addEventListener('click', () => ui.installDialog.close());
 video.addEventListener('loadeddata', enableProjectControls);
 video.addEventListener('seeked', () => {
+  syncWaveVideo();
   if (ui.maskDialog.open) renderMaskEditor();
+  requestRender();
 });
+waveVideo.addEventListener('loadeddata', requestRender);
 video.addEventListener('ended', () => {
   if (exporting && mediaRecorder?.state === 'recording') mediaRecorder.stop();
   stopPlayback();
@@ -1036,7 +1206,7 @@ window.addEventListener('pagehide', () => {
 });
 
 try {
-  const saved = JSON.parse(localStorage.getItem('kazuBeatFxSettingsV21'));
+  const saved = JSON.parse(localStorage.getItem('kazuBeatFxSettingsV30'));
   if (saved?.settings) applySettings(saved.settings);
 } catch (_) {}
 
@@ -1044,10 +1214,10 @@ updateOutputs();
 updateMaskStatus();
 setCanvasResolution();
 enableProjectControls();
-requestAnimationFrame(render);
+requestRender();
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-  navigator.serviceWorker.register('./service-worker.js?v=2.1.0').catch(() => {});
+  navigator.serviceWorker.register('./service-worker.js?v=3.0.0').catch(() => {});
 }
 
 if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) {

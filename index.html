@@ -7,16 +7,16 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Kazu Beat FX" />
-  <meta name="description" content="Editor pessoal de ondas reativas ao kick com máscara de profundidade." />
+  <meta name="description" content="Editor pessoal com onda em vídeo, reação ao kick e máscara de profundidade." />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=2.1.0" />
+  <link rel="stylesheet" href="styles.css?v=3.0.0" />
   <title>Kazu Beat FX</title>
 </head>
 <body>
   <header class="topbar">
     <div>
-      <p class="eyebrow">SRKAZU LAB · V2.1</p>
+      <p class="eyebrow">SRKAZU LAB · V3.0</p>
       <h1>Kazu Beat FX</h1>
     </div>
     <button id="installBtn" class="ghost hidden" type="button">Instalar</button>
@@ -30,7 +30,7 @@
           <strong>Adicione o vídeo principal</strong>
           <span>Depois pinte uma máscara sobre o personagem e o texto.</span>
         </div>
-        <div class="layer-badge">VÍDEO → ONDA MASCARADA → PNG OPCIONAL</div>
+        <div class="layer-badge">VÍDEO → WAVE MOTION → MÁSCARA → PNG</div>
         <div class="meter-wrap" aria-hidden="true"><div id="meter" class="meter"></div></div>
       </div>
 
@@ -109,31 +109,53 @@
         <label class="control"><span>Release <output id="releaseOut">145 ms</output></span><input id="release" type="range" min="20" max="1000" value="145" step="5" /></label>
       </article>
 
-      <article class="card panel">
+      <article class="card panel wave-panel">
         <div class="panel-title-row">
-          <h2>4. Onda fluida animada</h2>
+          <div>
+            <h2>4. Wave Motion em vídeo</h2>
+            <p class="section-kicker">Loop original inspirado no movimento do vídeo de referência</p>
+          </div>
           <label class="switch"><input id="waveEnabled" type="checkbox" checked /><span></span></label>
         </div>
-        <button id="fkuPresetBtn" class="ghost compact" type="button">Aplicar preset FKU</button>
+        <div class="wave-source-row">
+          <span class="asset-pill"><i></i> Vídeo interno carregado</span>
+          <button id="fkuPresetBtn" class="ghost compact" type="button">Aplicar preset FKU</button>
+        </div>
         <label class="select-field">
-          <span>Formato</span>
+          <span>Motor da onda</span>
           <select id="waveStyle">
-            <option value="contour" selected>Contornos topográficos</option>
+            <option value="video" selected>Wave Motion em vídeo</option>
+            <option value="contour">Contornos gerados</option>
             <option value="horizontal">Ondas horizontais</option>
           </select>
         </label>
-        <label class="control"><span>Opacidade sem kick <output id="waveMinOpacityOut">2%</output></span><input id="waveMinOpacity" type="range" min="0" max="100" value="2" step="1" /></label>
+        <label class="control"><span>Opacidade sem kick <output id="waveMinOpacityOut">0%</output></span><input id="waveMinOpacity" type="range" min="0" max="100" value="0" step="1" /></label>
         <label class="control"><span>Opacidade no kick <output id="waveMaxOpacityOut">100%</output></span><input id="waveMaxOpacity" type="range" min="0" max="100" value="100" step="1" /></label>
-        <label class="control"><span>Velocidade da animação <output id="waveSpeedOut">0.9×</output></span><input id="waveSpeed" type="range" min="0" max="300" value="90" step="5" /></label>
-        <label class="control"><span>Quantidade de linhas <output id="waveCountOut">7</output></span><input id="waveCount" type="range" min="2" max="14" value="7" step="1" /></label>
-        <label class="control"><span>Deformação líquida <output id="waveDeformOut">46%</output></span><input id="waveDeform" type="range" min="0" max="100" value="46" step="1" /></label>
-        <label class="control"><span>Pulsação no kick <output id="wavePulseOut">14%</output></span><input id="wavePulse" type="range" min="0" max="60" value="14" step="1" /></label>
-        <label class="control"><span>Tamanho <output id="waveScaleOut">108%</output></span><input id="waveScale" type="range" min="35" max="180" value="108" step="1" /></label>
-        <label class="control"><span>Espessura <output id="waveThicknessOut">4 px</output></span><input id="waveThickness" type="range" min="1" max="16" value="4" step="1" /></label>
-        <label class="control"><span>Glow <output id="waveGlowOut">42 px</output></span><input id="waveGlow" type="range" min="0" max="100" value="42" step="1" /></label>
+        <label class="control"><span>Velocidade do vídeo <output id="waveSpeedOut">1.0×</output></span><input id="waveSpeed" type="range" min="25" max="250" value="100" step="5" /></label>
+        <label class="control"><span>Pulsação no kick <output id="wavePulseOut">10%</output></span><input id="wavePulse" type="range" min="0" max="60" value="10" step="1" /></label>
+        <label class="control"><span>Tamanho <output id="waveScaleOut">112%</output></span><input id="waveScale" type="range" min="35" max="200" value="112" step="1" /></label>
+        <label class="control"><span>Glow <output id="waveGlowOut">28 px</output></span><input id="waveGlow" type="range" min="0" max="80" value="28" step="1" /></label>
+        <label class="control"><span>Corte do fundo preto <output id="waveThresholdOut">12%</output></span><input id="waveThreshold" type="range" min="0" max="70" value="12" step="1" /></label>
         <label class="control"><span>Posição horizontal <output id="wavePosXOut">50%</output></span><input id="wavePosX" type="range" min="0" max="100" value="50" step="1" /></label>
         <label class="control"><span>Posição vertical <output id="wavePosYOut">50%</output></span><input id="wavePosY" type="range" min="0" max="100" value="50" step="1" /></label>
-        <label class="color-field"><span>Cor da onda</span><input id="waveColor" type="color" value="#9b35ff" /></label>
+        <div class="color-grid">
+          <label class="color-field"><span>Cor da wave</span><input id="waveColor" type="color" value="#8b35ff" /></label>
+          <label class="color-field"><span>Núcleo luminoso</span><input id="waveCoreColor" type="color" value="#ffffff" /></label>
+        </div>
+        <div class="color-presets" aria-label="Cores rápidas">
+          <button type="button" class="color-chip" data-wave-color="#8b35ff" data-core-color="#ffffff" style="--chip:#8b35ff" aria-label="Roxo"></button>
+          <button type="button" class="color-chip" data-wave-color="#006eff" data-core-color="#d9f2ff" style="--chip:#006eff" aria-label="Azul"></button>
+          <button type="button" class="color-chip" data-wave-color="#ff174d" data-core-color="#fff0f4" style="--chip:#ff174d" aria-label="Vermelho"></button>
+          <button type="button" class="color-chip" data-wave-color="#ffd000" data-core-color="#fff9d6" style="--chip:#ffd000" aria-label="Amarelo"></button>
+          <button type="button" class="color-chip" data-wave-color="#00e676" data-core-color="#e3fff0" style="--chip:#00e676" aria-label="Verde"></button>
+          <button type="button" class="color-chip" data-wave-color="#ff39c8" data-core-color="#fff0fb" style="--chip:#ff39c8" aria-label="Rosa"></button>
+        </div>
+        <details class="advanced-controls">
+          <summary>Ajustes do modo gerado</summary>
+          <label class="control"><span>Quantidade de linhas <output id="waveCountOut">7</output></span><input id="waveCount" type="range" min="2" max="14" value="7" step="1" /></label>
+          <label class="control"><span>Deformação líquida <output id="waveDeformOut">46%</output></span><input id="waveDeform" type="range" min="0" max="100" value="46" step="1" /></label>
+          <label class="control"><span>Espessura <output id="waveThicknessOut">4 px</output></span><input id="waveThickness" type="range" min="1" max="16" value="4" step="1" /></label>
+        </details>
       </article>
 
       <article class="card panel">
@@ -150,7 +172,11 @@
       <article class="card panel">
         <h2>6. Projeto e exportação</h2>
         <label class="select-field">
-          <span>Resolução</span>
+          <span>Desempenho da prévia</span>
+          <select id="previewQuality"><option value="auto" selected>Automático</option><option value="economy">Econômico</option><option value="high">Alta qualidade</option></select>
+        </label>
+        <label class="select-field">
+          <span>Resolução da exportação</span>
           <select id="resolution"><option value="720" selected>1280 × 720</option><option value="1080">1920 × 1080</option></select>
         </label>
         <div class="button-stack">
@@ -200,7 +226,8 @@
   </dialog>
 
   <video id="videoEl" playsinline preload="metadata" hidden></video>
+  <video id="waveVideoEl" src="kazu-wave-motion.mp4" muted loop playsinline preload="auto" hidden></video>
   <audio id="audioEl" preload="metadata" hidden></audio>
-  <script src="app.js?v=2.1.0" defer></script>
+  <script src="app.js?v=3.0.0" defer></script>
 </body>
 </html>
