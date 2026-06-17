@@ -1,5 +1,7 @@
 'use strict';
 
+const APP_VERSION = '4.3.0';
+
 const $ = (id) => document.getElementById(id);
 const clamp = (number, min, max) => Math.min(max, Math.max(min, number));
 const numeric = (element) => Number(element.value);
@@ -42,7 +44,7 @@ const editorCtx = editorCanvas.getContext('2d');
 const ui = {
   emptyState: $('emptyState'), meter: $('meter'), lowMeter: $('lowMeter'), midMeter: $('midMeter'), highMeter: $('highMeter'), playBtn: $('playBtn'), stopBtn: $('stopBtn'),
   timeLabel: $('timeLabel'), seek: $('seek'), exportBtn: $('exportBtn'), exportStatus: $('exportStatus'),
-  videoInput: $('videoInput'), audioInput: $('audioInput'), foregroundInput: $('foregroundInput'),
+  videoInput: $('videoInput'), audioInput: $('audioInput'), foregroundInput: $('foregroundInput'), videoLoadStatus: $('videoLoadStatus'),
   videoFit: $('videoFit'), resolution: $('resolution'), previewQuality: $('previewQuality'),
 
   maskEnabled: $('maskEnabled'), openMaskEditorBtn: $('openMaskEditorBtn'), maskInput: $('maskInput'),
@@ -195,10 +197,18 @@ function rememberUrl(url) {
   return url;
 }
 
+function finiteDuration(media) {
+  const value = Number(media?.duration);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
 function projectDuration() {
-  const videoDuration = Number.isFinite(video.duration) ? video.duration : 0;
-  const audioDuration = hasExternalAudio && Number.isFinite(audio.duration) ? audio.duration : Infinity;
-  return Math.max(0, Math.min(videoDuration, audioDuration));
+  const videoDuration = finiteDuration(video);
+  if (!hasExternalAudio) return videoDuration;
+  const audioDuration = finiteDuration(audio);
+  if (!videoDuration) return audioDuration;
+  if (!audioDuration) return videoDuration;
+  return Math.min(videoDuration, audioDuration);
 }
 
 function previewDimensions() {
@@ -891,6 +901,12 @@ function requestRender() {
   renderRequested = true;
   if (!animationFrameId) animationFrameId = requestAnimationFrame(renderLoop);
 }
+function setVideoLoadStatus(message, type = '') {
+  if (!ui.videoLoadStatus) return;
+  ui.videoLoadStatus.textContent = message;
+  ui.videoLoadStatus.className = `status compact${type ? ` ${type}` : ''}`;
+}
+
 function enableProjectControls() {
   ui.emptyState.classList.toggle('hidden', hasVideo);
   ui.playBtn.disabled = !hasVideo;
@@ -901,29 +917,118 @@ function enableProjectControls() {
   setStatus(hasVideo ? 'Vídeo pronto. Crie a máscara para colocar a onda atrás dos elementos.' : 'Adicione o vídeo para começar.', hasVideo ? 'ok' : '');
 }
 
+function waitForMediaCondition(media, predicate, events, timeoutMs = 18000) {
+  if (predicate()) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      clearTimeout(timer);
+      events.forEach((name) => media.removeEventListener(name, check));
+      media.removeEventListener('error', fail);
+      media.removeEventListener('abort', fail);
+    };
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+    const fail = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      const mediaError = media.error;
+      const code = mediaError?.code ? ` (código ${mediaError.code})` : '';
+      reject(new Error(`O navegador não conseguiu decodificar este arquivo${code}. Tente MP4 H.264.`));
+    };
+    const check = () => { if (predicate()) finish(); };
+    events.forEach((name) => media.addEventListener(name, check));
+    media.addEventListener('error', fail, { once: true });
+    media.addEventListener('abort', fail, { once: true });
+    const timer = setTimeout(() => {
+      if (predicate()) finish();
+      else { settled = true; cleanup(); reject(new Error('O vídeo demorou demais para carregar. Tente novamente ou converta para MP4 H.264.')); }
+    }, timeoutMs);
+  });
+}
+
+async function normalizeDuration(media) {
+  if (finiteDuration(media)) return;
+  try {
+    const initialTime = media.currentTime || 0;
+    media.currentTime = 1e7;
+    await waitForMediaCondition(media, () => finiteDuration(media) > 0, ['durationchange', 'timeupdate', 'seeked'], 2500);
+    media.currentTime = initialTime;
+  } catch (_) {
+    try { media.currentTime = 0; } catch (_) {}
+  }
+}
+
+async function primeVideoFrame(media) {
+  if (media.readyState >= 2 && media.videoWidth > 0) return;
+  const previousMuted = media.muted;
+  media.muted = true;
+  try {
+    const playPromise = media.play();
+    if (playPromise) await playPromise;
+    if (typeof media.requestVideoFrameCallback === 'function') {
+      await Promise.race([
+        new Promise((resolve) => media.requestVideoFrameCallback(() => resolve())),
+        new Promise((resolve) => setTimeout(resolve, 900))
+      ]);
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+  } catch (_) {
+    // A frame can still become available through loadeddata/canplay.
+  } finally {
+    media.pause();
+    media.muted = previousMuted;
+    try { media.currentTime = 0; } catch (_) {}
+  }
+}
+
 async function loadVideo(file) {
   pauseProject();
-  video.src = rememberUrl(URL.createObjectURL(file));
+  hasVideo = false;
+  enableProjectControls();
+  setVideoLoadStatus(`Carregando ${file.name}…`);
+
+  video.pause();
+  video.removeAttribute('src');
   video.load();
-  await new Promise((resolve, reject) => {
-    video.onloadedmetadata = resolve;
-    video.onerror = () => reject(new Error('Não foi possível abrir o vídeo.'));
-  });
+  const url = rememberUrl(URL.createObjectURL(file));
+  video.preload = 'auto';
+  video.playsInline = true;
+  video.src = url;
+  video.load();
+
+  await waitForMediaCondition(video, () => video.readyState >= 1 && video.videoWidth > 0, ['loadedmetadata', 'durationchange'], 18000);
+  await normalizeDuration(video);
+  await waitForMediaCondition(video, () => video.readyState >= 2 && video.videoWidth > 0, ['loadeddata', 'canplay', 'canplaythrough'], 18000);
+  await primeVideoFrame(video);
+
   hasVideo = true;
-  video.currentTime = 0;
+  try { video.currentTime = 0; } catch (_) {}
   enableProjectControls();
   updateAudioGains();
+  setVideoLoadStatus(`${file.name} · ${video.videoWidth}×${video.videoHeight} · ${formatTime(projectDuration())}`, 'ok');
+  setCanvasResolution();
+  renderFrame(performance.now());
   requestRender();
 }
 
 async function loadAudio(file) {
   pauseProject();
-  audio.src = rememberUrl(URL.createObjectURL(file));
+  audio.pause();
+  audio.removeAttribute('src');
   audio.load();
-  await new Promise((resolve, reject) => {
-    audio.onloadedmetadata = resolve;
-    audio.onerror = () => reject(new Error('Não foi possível abrir a música.'));
-  });
+  const url = rememberUrl(URL.createObjectURL(file));
+  audio.preload = 'auto';
+  audio.src = url;
+  audio.load();
+  await waitForMediaCondition(audio, () => audio.readyState >= 1, ['loadedmetadata', 'durationchange'], 18000);
+  await normalizeDuration(audio);
   hasExternalAudio = true;
   updateAudioGains();
   setStatus('Música separada carregada e sincronizada.', 'ok');
@@ -948,7 +1053,13 @@ function updateAudioGains() {
 
 async function playProject() {
   if (!hasVideo) return;
-  await ensureAudioGraph();
+  try {
+    await waitForMediaCondition(video, () => video.readyState >= 2 && video.videoWidth > 0, ['loadeddata', 'canplay'], 8000);
+    await ensureAudioGraph();
+  } catch (error) {
+    setStatus(`Não foi possível iniciar o vídeo: ${error.message}`, 'error');
+    return;
+  }
   updateAudioGains();
   const duration = projectDuration();
   if (duration > 0 && video.currentTime >= duration - 0.05) {
@@ -1229,7 +1340,7 @@ function collectSettings() {
 function collectProject() {
   return {
     app: 'Kazu Beat FX',
-    version: '4.1',
+    version: '4.3',
     createdAt: new Date().toISOString(),
     note: 'Os arquivos de vídeo e áudio não ficam dentro do JSON; selecione-os novamente.',
     settings: collectSettings(),
@@ -1336,7 +1447,7 @@ function applyFkuPreset() {
 
 function saveLocalSettings() {
   try {
-    localStorage.setItem('kazuBeatFxSettingsV42', JSON.stringify({ settings: collectSettings() }));
+    localStorage.setItem('kazuBeatFxSettingsV43', JSON.stringify({ settings: collectSettings() }));
   } catch (_) {}
 }
 
@@ -1525,7 +1636,7 @@ document.querySelectorAll('.color-chip').forEach((button) => {
 
 ui.saveProjectBtn.addEventListener('click', () => {
   const blob = new Blob([JSON.stringify(collectProject(), null, 2)], { type: 'application/json' });
-  downloadBlob(blob, 'Kazu-Beat-FX-v4.1-Projeto.json');
+  downloadBlob(blob, 'Kazu-Beat-FX-v4.3-Projeto.json');
 });
 
 ui.projectInput.addEventListener('change', async (event) => {
@@ -1561,7 +1672,10 @@ ui.installBtn.addEventListener('click', async () => {
 });
 
 ui.closeInstallDialog.addEventListener('click', () => ui.installDialog.close());
-video.addEventListener('loadeddata', enableProjectControls);
+video.addEventListener('loadeddata', () => { if (hasVideo) { enableProjectControls(); requestRender(); } });
+video.addEventListener('canplay', requestRender);
+video.addEventListener('durationchange', () => { if (hasVideo) requestRender(); });
+video.addEventListener('error', () => setVideoLoadStatus('Falha ao decodificar o vídeo. Use MP4 H.264.', 'error'));
 video.addEventListener('seeked', () => {
   syncWaveVideo();
   if (ui.maskDialog.open) renderMaskEditor();
@@ -1585,8 +1699,8 @@ window.addEventListener('resize', refreshCanvasLayout, { passive: true });
 window.addEventListener('orientationchange', refreshCanvasLayout, { passive: true });
 
 try {
-  const currentSaved = JSON.parse(localStorage.getItem('kazuBeatFxSettingsV42') || 'null');
-  const legacySaved = JSON.parse(localStorage.getItem('kazuBeatFxSettingsV41') || localStorage.getItem('kazuBeatFxSettingsV40') || localStorage.getItem('kazuBeatFxSettingsV30') || 'null');
+  const currentSaved = JSON.parse(localStorage.getItem('kazuBeatFxSettingsV43') || 'null');
+  const legacySaved = JSON.parse(localStorage.getItem('kazuBeatFxSettingsV42') || localStorage.getItem('kazuBeatFxSettingsV41') || localStorage.getItem('kazuBeatFxSettingsV40') || localStorage.getItem('kazuBeatFxSettingsV30') || 'null');
   const saved = currentSaved || legacySaved;
   if (saved?.settings) {
     const migrated = { ...saved.settings };
@@ -1600,6 +1714,18 @@ try {
   }
 } catch (_) {}
 
+if (waveVideo) {
+  waveVideo.muted = true;
+  waveVideo.loop = true;
+  waveVideo.playsInline = true;
+  if (!waveVideo.getAttribute('src')) waveVideo.src = `kazu-wave-motion.mp4?v=${APP_VERSION}`;
+  waveVideo.load();
+}
+
+if ('caches' in window) {
+  caches.keys().then((keys) => Promise.all(keys.filter((key) => !key.includes('v4.3')).map((key) => caches.delete(key)))).catch(() => {});
+}
+
 updateOutputs();
 updateMaskStatus();
 setCanvasResolution();
@@ -1607,7 +1733,7 @@ enableProjectControls();
 requestRender();
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-  navigator.serviceWorker.register('./service-worker.js?v=4.2.0').catch(() => {});
+  navigator.serviceWorker.register('./service-worker.js?v=4.3.0', { updateViaCache: 'none' }).then((registration) => registration.update()).catch(() => {});
 }
 
 if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) {

@@ -1,66 +1,56 @@
-const CACHE = 'kazu-beat-fx-v4.2.0';
-const APP_SHELL = [
+const CACHE = 'kazu-beat-fx-v4.3.0';
+const CORE = [
   './',
   './index.html',
-  './styles.css?v=4.2.0',
-  './app.js?v=4.2.0',
-  './manifest.webmanifest',
+  './styles.css?v=4.3.0',
+  './app.js?v=4.3.0',
+  './manifest.webmanifest?v=4.3.0',
   './icons/icon-192.png',
-  './icons/icon-512.png',
-  './kazu-wave-motion.mp4'
+  './icons/icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL)));
-  self.skipWaiting();
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    await Promise.allSettled(CORE.map((url) => cache.add(url)));
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) => Promise.all(
-      keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))
-    ))
-  );
-  self.clients.claim();
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)));
+    await self.clients.claim();
+  })());
 });
 
-async function cachedRangeResponse(request) {
-  const cached = await caches.match(new URL(request.url).pathname.endsWith('kazu-wave-motion.mp4')
-    ? './kazu-wave-motion.mp4'
-    : request.url);
-  if (!cached) return fetch(request);
-  const range = request.headers.get('range');
-  if (!range) return cached;
-  const data = await cached.arrayBuffer();
-  const match = /bytes=(\d+)-(\d*)/.exec(range);
-  if (!match) return cached;
-  const start = Number(match[1]);
-  const end = match[2] ? Number(match[2]) : data.byteLength - 1;
-  return new Response(data.slice(start, end + 1), {
-    status: 206,
-    statusText: 'Partial Content',
-    headers: {
-      'Content-Type': 'video/mp4',
-      'Content-Range': `bytes ${start}-${end}/${data.byteLength}`,
-      'Accept-Ranges': 'bytes',
-      'Content-Length': String(end - start + 1)
-    }
-  });
+async function networkFirst(request) {
+  const cache = await caches.open(CACHE);
+  try {
+    const response = await fetch(request, { cache: 'no-store' });
+    if (response.ok && request.method === 'GET') cache.put(request, response.clone()).catch(() => {});
+    return response;
+  } catch (_) {
+    return (await cache.match(request)) || (await cache.match('./index.html'));
+  }
 }
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
-  if (event.request.headers.has('range')) {
-    event.respondWith(fetch(event.request).catch(() => cachedRangeResponse(event.request)));
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
+
+  // Never cache/intercept video byte ranges. Safari needs the server's native Range response.
+  if (url.pathname.endsWith('.mp4') || event.request.headers.has('range')) {
+    event.respondWith(fetch(event.request));
     return;
   }
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE).then((cache) => cache.put(event.request, copy));
-        return response;
-      })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match('./index.html')))
-  );
+
+  if (event.request.mode === 'navigate' || /\.(?:js|css|html|webmanifest)$/.test(url.pathname)) {
+    event.respondWith(networkFirst(event.request));
+    return;
+  }
+
+  event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request)));
 });

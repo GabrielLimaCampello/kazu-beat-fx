@@ -1,8 +1,8 @@
 {
   "name": "Kazu Beat FX",
   "short_name": "Kazu Beat FX",
-  "description": "Editor pessoal multibanda com Wave Motion em vídeo, máscara de profundidade, câmera, flash, RGB split, glints e trails.",
-  "start_url": "./",
+  "description": "Editor pessoal V4.3 com carregamento de vídeo corrigido, Wave Motion, máscara de profundidade e efeitos multibanda.",
+  "start_url": "./?v=4.3.0",
   "scope": "./",
   "display": "standalone",
   "background_color": "#07040c",

@@ -427,3 +427,20 @@ details summary { cursor: pointer; padding: 13px 0; font-weight: 720; color: #de
   button, .button-label { touch-action: manipulation; }
   .panel, .hero, .preset-bar { backdrop-filter: none; }
 }
+
+
+/* V4.3: keep media decoders active without showing native players.
+   display:none/hidden can prevent iOS Safari from producing canvas frames. */
+.media-source {
+  position: fixed !important;
+  left: -12px !important;
+  top: -12px !important;
+  width: 2px !important;
+  height: 2px !important;
+  opacity: 0.001 !important;
+  pointer-events: none !important;
+  z-index: -1 !important;
+}
+.status.compact { margin: -4px 0 8px; min-height: 1.35em; font-size: .82rem; }
+.status.compact.ok { color: #8effc1; }
+.status.compact.error { color: #ff8aa0; }
