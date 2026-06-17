@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '4.3.0';
+const APP_VERSION = '4.4.0';
 
 const $ = (id) => document.getElementById(id);
 const clamp = (number, min, max) => Math.min(max, Math.max(min, number));
@@ -26,6 +26,8 @@ const sourceFrameCanvas = document.createElement('canvas');
 const sourceFrameCtx = sourceFrameCanvas.getContext('2d', { alpha: false, desynchronized: true });
 const protectedVideoCanvas = document.createElement('canvas');
 const protectedVideoCtx = protectedVideoCanvas.getContext('2d', { alpha: true, desynchronized: true });
+const upscaleCanvas = document.createElement('canvas');
+const upscaleCtx = upscaleCanvas.getContext('2d', { alpha: false, desynchronized: true });
 
 // The mask is deliberately smaller than the output to keep painting responsive on iPhone.
 const maskCanvas = document.createElement('canvas');
@@ -45,7 +47,7 @@ const ui = {
   emptyState: $('emptyState'), meter: $('meter'), lowMeter: $('lowMeter'), midMeter: $('midMeter'), highMeter: $('highMeter'), playBtn: $('playBtn'), stopBtn: $('stopBtn'),
   timeLabel: $('timeLabel'), seek: $('seek'), exportBtn: $('exportBtn'), exportStatus: $('exportStatus'),
   videoInput: $('videoInput'), audioInput: $('audioInput'), foregroundInput: $('foregroundInput'), videoLoadStatus: $('videoLoadStatus'),
-  videoFit: $('videoFit'), resolution: $('resolution'), previewQuality: $('previewQuality'),
+  videoFit: $('videoFit'), resolution: $('resolution'), previewQuality: $('previewQuality'), exportUpscale: $('exportUpscale'), upscaleSharpen: $('upscaleSharpen'),
 
   maskEnabled: $('maskEnabled'), openMaskEditorBtn: $('openMaskEditorBtn'), maskInput: $('maskInput'),
   exportMaskBtn: $('exportMaskBtn'), clearMaskBtn: $('clearMaskBtn'), maskFeather: $('maskFeather'),
@@ -123,6 +125,7 @@ const outputs = {
   glintsSize: ['glintsSizeOut', (v) => `${v} px`],
   trailsAmount: ['trailsAmountOut', (v) => `${v}%`],
   trailsSpeed: ['trailsSpeedOut', (v) => `${(v / 100).toFixed(1)}×`],
+  upscaleSharpen: ['upscaleSharpenOut', (v) => `${v}%`],
   brushSize: ['brushSizeOut', (v) => `${v} px`]
 };
 
@@ -222,6 +225,17 @@ function previewDimensions() {
   return lowPower ? [640, 360] : [960, 540];
 }
 
+
+function exportUpscaleFactor() {
+  const factor = Number(ui.exportUpscale?.value || 1);
+  return exporting ? clamp(Number.isFinite(factor) ? factor : 1, 1, 2) : 1;
+}
+
+function exportSharpenAmount() {
+  const amount = Number(ui.upscaleSharpen?.value || 0) / 100;
+  return exporting ? clamp(Number.isFinite(amount) ? amount : 0, 0, 1) : 0;
+}
+
 function setCanvasResolution() {
   const [width, height] = previewDimensions();
   let resized = false;
@@ -242,7 +256,8 @@ function setCanvasResolution() {
     maskedWaveCanvas,
     processedMaskCanvas,
     sourceFrameCanvas,
-    protectedVideoCanvas
+    protectedVideoCanvas,
+    upscaleCanvas
   ]) {
     if (offscreen.width !== width || offscreen.height !== height) {
       offscreen.width = width;
@@ -279,8 +294,44 @@ function drawVideoTo(targetCtx, targetCanvas) {
   targetCtx.fillStyle = '#000';
   targetCtx.fillRect(0, 0, targetCanvas.width, targetCanvas.height);
   if (hasVideo && video.readyState >= 2 && video.videoWidth && video.videoHeight) {
-    const rect = fitRect(video.videoWidth, video.videoHeight, targetCanvas.width, targetCanvas.height, ui.videoFit.value);
-    targetCtx.drawImage(video, rect.x, rect.y, rect.width, rect.height);
+    const upscale = exportUpscaleFactor();
+    const sharpen = exportSharpenAmount();
+    if (upscale > 1.01) {
+      const superWidth = Math.max(targetCanvas.width, Math.round(targetCanvas.width * upscale));
+      const superHeight = Math.max(targetCanvas.height, Math.round(targetCanvas.height * upscale));
+      if (upscaleCanvas.width !== superWidth || upscaleCanvas.height !== superHeight) {
+        upscaleCanvas.width = superWidth;
+        upscaleCanvas.height = superHeight;
+      }
+      upscaleCtx.save();
+      upscaleCtx.globalCompositeOperation = 'source-over';
+      upscaleCtx.globalAlpha = 1;
+      upscaleCtx.filter = 'none';
+      upscaleCtx.fillStyle = '#000';
+      upscaleCtx.fillRect(0, 0, superWidth, superHeight);
+      upscaleCtx.imageSmoothingEnabled = true;
+      upscaleCtx.imageSmoothingQuality = 'high';
+      const rect = fitRect(video.videoWidth, video.videoHeight, superWidth, superHeight, ui.videoFit.value);
+      upscaleCtx.drawImage(video, rect.x, rect.y, rect.width, rect.height);
+      if (sharpen > 0.01) {
+        const bloom = Math.max(0.04, 0.10 + sharpen * 0.10);
+        upscaleCtx.globalCompositeOperation = 'overlay';
+        upscaleCtx.globalAlpha = bloom;
+        upscaleCtx.filter = `contrast(${100 + sharpen * 18}%) saturate(${100 + sharpen * 10}%)`;
+        upscaleCtx.drawImage(upscaleCanvas, 0, 0);
+      }
+      upscaleCtx.restore();
+
+      targetCtx.imageSmoothingEnabled = true;
+      targetCtx.imageSmoothingQuality = 'high';
+      targetCtx.filter = sharpen > 0.01 ? `contrast(${100 + sharpen * 9}%) saturate(${100 + sharpen * 6}%)` : 'none';
+      targetCtx.drawImage(upscaleCanvas, 0, 0, targetCanvas.width, targetCanvas.height);
+    } else {
+      const rect = fitRect(video.videoWidth, video.videoHeight, targetCanvas.width, targetCanvas.height, ui.videoFit.value);
+      targetCtx.imageSmoothingEnabled = true;
+      targetCtx.imageSmoothingQuality = 'high';
+      targetCtx.drawImage(video, rect.x, rect.y, rect.width, rect.height);
+    }
   }
   targetCtx.restore();
 }
@@ -1324,6 +1375,7 @@ function settingKeys() {
     'cameraEnabled', 'cameraBreathing', 'kickZoom', 'cameraShake', 'parallaxEnabled', 'parallaxAmount',
     'flashEnabled', 'flashAmount', 'blurEnabled', 'blurAmount', 'rgbEnabled', 'rgbAmount',
     'glintsEnabled', 'glintsAmount', 'glintsSize', 'trailsEnabled', 'trailsAmount', 'trailsSpeed',
+    'exportUpscale', 'upscaleSharpen',
     'foregroundScale', 'foregroundPosX', 'foregroundPosY', 'foregroundRotation', 'foregroundOpacity',
     'foregroundKickZoom'
   ];
@@ -1340,7 +1392,7 @@ function collectSettings() {
 function collectProject() {
   return {
     app: 'Kazu Beat FX',
-    version: '4.3',
+    version: '4.4',
     createdAt: new Date().toISOString(),
     note: 'Os arquivos de vídeo e áudio não ficam dentro do JSON; selecione-os novamente.',
     settings: collectSettings(),
@@ -1447,7 +1499,7 @@ function applyFkuPreset() {
 
 function saveLocalSettings() {
   try {
-    localStorage.setItem('kazuBeatFxSettingsV43', JSON.stringify({ settings: collectSettings() }));
+    localStorage.setItem('kazuBeatFxSettingsV44', JSON.stringify({ settings: collectSettings() }));
   } catch (_) {}
 }
 
@@ -1495,7 +1547,7 @@ async function exportVideo() {
     const combinedStream = new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
     const mimeType = pickMimeType();
     const options = mimeType
-      ? { mimeType, videoBitsPerSecond: ui.resolution.value === '1080' ? 12_000_000 : 7_000_000 }
+      ? { mimeType, videoBitsPerSecond: ui.resolution.value === '1080' ? (exportUpscaleFactor() > 1.01 ? 16_000_000 : 12_000_000) : (exportUpscaleFactor() > 1.01 ? 9_000_000 : 7_000_000) }
       : {};
 
     mediaRecorder = new MediaRecorder(combinedStream, options);
@@ -1522,7 +1574,7 @@ async function exportVideo() {
 
     ui.exportBtn.disabled = true;
     ui.exportBtn.textContent = 'Exportando…';
-    setStatus('Exportando em tempo real. Não bloqueie a tela nem saia do app.');
+    setStatus(`Exportando em tempo real${exportUpscaleFactor() > 1.01 ? ` com upscale ${exportUpscaleFactor().toFixed(2)}×` : ''}. Não bloqueie a tela nem saia do app.`);
     mediaRecorder.start(1000);
     await playProject();
   } catch (error) {
@@ -1591,6 +1643,8 @@ ui.brushSize.addEventListener('input', () => { updateOutputs(); renderMaskEditor
 
 ui.exportBtn.addEventListener('click', exportVideo);
 ui.resolution.addEventListener('change', () => { setCanvasResolution(); requestRender(); });
+ui.exportUpscale?.addEventListener('change', () => { updateOutputs(); requestRender(); });
+ui.upscaleSharpen?.addEventListener('input', () => { updateOutputs(); requestRender(); });
 ui.previewQuality.addEventListener('change', () => { setCanvasResolution(); requestRender(); });
 ui.fkuPresetBtn.addEventListener('click', applyFkuPreset);
 ui.centerWaveBtn?.addEventListener('click', () => {
@@ -1699,7 +1753,7 @@ window.addEventListener('resize', refreshCanvasLayout, { passive: true });
 window.addEventListener('orientationchange', refreshCanvasLayout, { passive: true });
 
 try {
-  const currentSaved = JSON.parse(localStorage.getItem('kazuBeatFxSettingsV43') || 'null');
+  const currentSaved = JSON.parse(localStorage.getItem('kazuBeatFxSettingsV44') || 'null');
   const legacySaved = JSON.parse(localStorage.getItem('kazuBeatFxSettingsV42') || localStorage.getItem('kazuBeatFxSettingsV41') || localStorage.getItem('kazuBeatFxSettingsV40') || localStorage.getItem('kazuBeatFxSettingsV30') || 'null');
   const saved = currentSaved || legacySaved;
   if (saved?.settings) {

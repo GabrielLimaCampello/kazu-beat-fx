@@ -1,10 +1,10 @@
-const CACHE = 'kazu-beat-fx-v4.3.0';
+const CACHE = 'kazu-beat-fx-v4.4.0';
 const CORE = [
   './',
   './index.html',
-  './styles.css?v=4.3.0',
-  './app.js?v=4.3.0',
-  './manifest.webmanifest?v=4.3.0',
+  './styles.css?v=4.4.0',
+  './app.js?v=4.4.0',
+  './manifest.webmanifest?v=4.4.0',
   './icons/icon-192.png',
   './icons/icon-512.png'
 ];
