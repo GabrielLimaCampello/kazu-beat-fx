@@ -57,7 +57,7 @@ const ui = {
   waveDeform: $('waveDeform'), wavePulse: $('wavePulse'), waveScale: $('waveScale'),
   waveThickness: $('waveThickness'), waveGlow: $('waveGlow'), wavePosX: $('wavePosX'),
   wavePosY: $('wavePosY'), waveColor: $('waveColor'), waveCoreColor: $('waveCoreColor'),
-  waveThreshold: $('waveThreshold'), fkuPresetBtn: $('fkuPresetBtn'),
+  waveThreshold: $('waveThreshold'), fkuPresetBtn: $('fkuPresetBtn'), centerWaveBtn: $('centerWaveBtn'),
 
   presetSelect: $('presetSelect'), applyPresetBtn: $('applyPresetBtn'), masterIntensity: $('masterIntensity'),
   cameraEnabled: $('cameraEnabled'), cameraBreathing: $('cameraBreathing'), kickZoom: $('kickZoom'),
@@ -516,15 +516,31 @@ function tintCanvas(sourceCtx, targetCtx, color) {
 }
 
 function drawVideoWaveLayer(opacity, pulseScale) {
-  if (waveVideo.readyState < 2 || !waveVideo.videoWidth) return false;
+  if (!waveVideo || waveVideo.readyState < 2 || !waveVideo.videoWidth) return false;
 
   const sourceWidth = waveSourceCanvas.width;
   const sourceHeight = waveSourceCanvas.height;
-  const scale = numeric(ui.waveScale) / 100 * pulseScale;
-  const width = sourceWidth * scale;
-  const height = sourceHeight * scale;
-  const x = sourceWidth * numeric(ui.wavePosX) / 100 - width / 2;
-  const y = sourceHeight * numeric(ui.wavePosY) / 100 - height / 2;
+  const scale = Math.max(0.72, numeric(ui.waveScale) / 100 * pulseScale);
+
+  // Always fit the motion video to the whole composition first. Position sliders now
+  // act as a controlled offset around the centre instead of using the top-left as origin.
+  const baseRect = fitRect(
+    waveVideo.videoWidth || 16,
+    waveVideo.videoHeight || 9,
+    sourceWidth,
+    sourceHeight,
+    'cover'
+  );
+  const width = baseRect.width * scale;
+  const height = baseRect.height * scale;
+  const safePosX = clamp(numeric(ui.wavePosX), 12, 88);
+  const safePosY = clamp(numeric(ui.wavePosY), 12, 88);
+  const travelX = Math.max(sourceWidth * 0.18, Math.abs(width - sourceWidth) * 0.5);
+  const travelY = Math.max(sourceHeight * 0.18, Math.abs(height - sourceHeight) * 0.5);
+  const offsetX = ((safePosX - 50) / 38) * travelX;
+  const offsetY = ((safePosY - 50) / 38) * travelY;
+  const x = (sourceWidth - width) / 2 + offsetX;
+  const y = (sourceHeight - height) / 2 + offsetY;
   const threshold = numeric(ui.waveThreshold) / 100;
   const contrast = 100 + threshold * 410;
   const brightness = 100 + threshold * 80;
@@ -767,7 +783,7 @@ function drawForeground() {
 }
 
 function syncWaveVideo() {
-  if (ui.waveStyle.value !== 'video' || !Number.isFinite(waveVideo.duration) || waveVideo.duration <= 0) return;
+  if (!waveVideo || ui.waveStyle.value !== 'video' || !Number.isFinite(waveVideo.duration) || waveVideo.duration <= 0) return;
   const speed = numeric(ui.waveSpeed) / 100;
   waveVideo.playbackRate = clamp(speed, 0.25, 2.5);
   const target = (video.currentTime * speed) % waveVideo.duration;
@@ -920,7 +936,7 @@ async function playProject() {
     if (hasExternalAudio) audio.currentTime = 0;
   }
   syncWaveVideo();
-  const wavePromise = ui.waveStyle.value === 'video' ? waveVideo.play().catch(() => undefined) : Promise.resolve();
+  const wavePromise = ui.waveStyle.value === 'video' && waveVideo ? waveVideo.play().catch(() => undefined) : Promise.resolve();
   if (hasExternalAudio) {
     audio.currentTime = video.currentTime;
     await Promise.all([video.play(), audio.play(), wavePromise]);
@@ -935,7 +951,7 @@ async function playProject() {
 function pauseProject() {
   video.pause();
   audio.pause();
-  waveVideo.pause();
+  waveVideo?.pause();
   playing = false;
   ui.playBtn.textContent = '▶ Reproduzir';
   requestRender();
@@ -948,7 +964,7 @@ function stopPlayback() {
   envelope = 0;
   midEnvelope = 0;
   highEnvelope = 0;
-  if (Number.isFinite(waveVideo.duration)) waveVideo.currentTime = 0;
+  if (waveVideo && Number.isFinite(waveVideo.duration)) waveVideo.currentTime = 0;
   requestRender();
 }
 
@@ -1193,7 +1209,7 @@ function collectSettings() {
 function collectProject() {
   return {
     app: 'Kazu Beat FX',
-    version: '4.0',
+    version: '4.1',
     createdAt: new Date().toISOString(),
     note: 'Os arquivos de vídeo e áudio não ficam dentro do JSON; selecione-os novamente.',
     settings: collectSettings(),
@@ -1300,7 +1316,7 @@ function applyFkuPreset() {
 
 function saveLocalSettings() {
   try {
-    localStorage.setItem('kazuBeatFxSettingsV40', JSON.stringify({ settings: collectSettings() }));
+    localStorage.setItem('kazuBeatFxSettingsV41', JSON.stringify({ settings: collectSettings() }));
   } catch (_) {}
 }
 
@@ -1446,6 +1462,17 @@ ui.exportBtn.addEventListener('click', exportVideo);
 ui.resolution.addEventListener('change', () => { setCanvasResolution(); requestRender(); });
 ui.previewQuality.addEventListener('change', () => { setCanvasResolution(); requestRender(); });
 ui.fkuPresetBtn.addEventListener('click', applyFkuPreset);
+ui.centerWaveBtn?.addEventListener('click', () => {
+  ui.wavePosX.value = '50';
+  ui.wavePosY.value = '50';
+  ui.waveScale.value = String(Math.max(112, numeric(ui.waveScale)));
+  ui.waveStyle.value = 'video';
+  updateOutputs();
+  saveLocalSettings();
+  syncWaveVideo();
+  setStatus('Wave centralizada e ajustada para preencher a composição.', 'ok');
+  requestRender();
+});
 ui.applyPresetBtn.addEventListener('click', () => applyNamedPreset(ui.presetSelect.value));
 
 Object.entries(outputs).forEach(([key]) => {
@@ -1461,8 +1488,8 @@ settingKeys().forEach((key) => ui[key].addEventListener('change', () => {
   saveLocalSettings();
   if (key === 'maskEnabled' || key === 'maskFeather' || key === 'maskExpand') maskCacheDirty = true;
   if (key === 'waveStyle' && playing) {
-    if (ui.waveStyle.value === 'video') waveVideo.play().catch(() => undefined);
-    else waveVideo.pause();
+    if (ui.waveStyle.value === 'video' && waveVideo) waveVideo.play().catch(() => undefined);
+    else waveVideo?.pause();
   }
   requestRender();
 }));
@@ -1478,7 +1505,7 @@ document.querySelectorAll('.color-chip').forEach((button) => {
 
 ui.saveProjectBtn.addEventListener('click', () => {
   const blob = new Blob([JSON.stringify(collectProject(), null, 2)], { type: 'application/json' });
-  downloadBlob(blob, 'Kazu-Beat-FX-v4-Projeto.json');
+  downloadBlob(blob, 'Kazu-Beat-FX-v4.1-Projeto.json');
 });
 
 ui.projectInput.addEventListener('change', async (event) => {
@@ -1520,7 +1547,7 @@ video.addEventListener('seeked', () => {
   if (ui.maskDialog.open) renderMaskEditor();
   requestRender();
 });
-waveVideo.addEventListener('loadeddata', requestRender);
+waveVideo?.addEventListener('loadeddata', requestRender);
 video.addEventListener('ended', () => {
   if (exporting && mediaRecorder?.state === 'recording') mediaRecorder.stop();
   stopPlayback();
@@ -1531,8 +1558,19 @@ window.addEventListener('pagehide', () => {
 });
 
 try {
-  const saved = JSON.parse(localStorage.getItem('kazuBeatFxSettingsV40') || localStorage.getItem('kazuBeatFxSettingsV30'));
-  if (saved?.settings) applySettings(saved.settings);
+  const currentSaved = JSON.parse(localStorage.getItem('kazuBeatFxSettingsV41') || 'null');
+  const legacySaved = JSON.parse(localStorage.getItem('kazuBeatFxSettingsV40') || localStorage.getItem('kazuBeatFxSettingsV30') || 'null');
+  const saved = currentSaved || legacySaved;
+  if (saved?.settings) {
+    const migrated = { ...saved.settings };
+    if (!currentSaved) {
+      migrated.waveStyle = 'video';
+      migrated.wavePosX = 50;
+      migrated.wavePosY = 50;
+      migrated.waveScale = Math.max(112, Number(migrated.waveScale) || 112);
+    }
+    applySettings(migrated);
+  }
 } catch (_) {}
 
 updateOutputs();
@@ -1542,7 +1580,7 @@ enableProjectControls();
 requestRender();
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-  navigator.serviceWorker.register('./service-worker.js?v=4.0.0').catch(() => {});
+  navigator.serviceWorker.register('./service-worker.js?v=4.1.0').catch(() => {});
 }
 
 if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) {
