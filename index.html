@@ -10,13 +10,13 @@
   <meta name="description" content="Editor pessoal de ondas reativas ao kick com máscara de profundidade." />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="styles.css?v=4.1.0" />
+  <link rel="stylesheet" href="styles.css?v=4.2.0" />
   <title>Kazu Beat FX</title>
 </head>
 <body>
   <header class="topbar">
     <div>
-      <p class="eyebrow">SRKAZU LAB · V4.1</p>
+      <p class="eyebrow">SRKAZU LAB · V4.2</p>
       <h1>Kazu Beat FX</h1>
     </div>
     <button id="installBtn" class="ghost hidden" type="button">Instalar</button>
@@ -30,12 +30,7 @@
           <strong>Adicione o vídeo principal</strong>
           <span>Depois pinte uma máscara sobre o personagem e o texto.</span>
         </div>
-        <div class="layer-badge">VÍDEO → WAVE MOTION CENTRALIZADA → MÁSCARA → PNG</div>
-        <div class="multiband-meter" aria-hidden="true">
-          <div><span>LOW</span><i><b id="lowMeter"></b></i></div>
-          <div><span>MID</span><i><b id="midMeter"></b></i></div>
-          <div><span>HIGH</span><i><b id="highMeter"></b></i></div>
-        </div>
+        <div class="layer-badge">VÍDEO → ONDA MASCARADA → PNG OPCIONAL</div>
         <div class="meter-wrap" aria-hidden="true"><div id="meter" class="meter"></div></div>
       </div>
 
@@ -63,14 +58,6 @@
           <select id="videoFit">
             <option value="cover" selected>Preencher</option>
             <option value="contain">Encaixar</option>
-          </select>
-        </label>
-        <label class="select-field">
-          <span>Desempenho da prévia</span>
-          <select id="previewQuality">
-            <option value="auto" selected>Automático</option>
-            <option value="economy">Econômico</option>
-            <option value="high">Alta qualidade</option>
           </select>
         </label>
         <p class="hint">O vídeo pode estar totalmente achatado. A máscara informa ao app onde a onda não deve passar.</p>
@@ -118,8 +105,6 @@
         <label class="control"><span>Frequência máxima <output id="highHzOut">100 Hz</output></span><input id="highHz" type="range" min="60" max="300" value="100" step="1" /></label>
         <label class="control"><span>Gate de silêncio <output id="thresholdOut">18%</output></span><input id="threshold" type="range" min="0" max="80" value="18" step="1" /></label>
         <label class="control"><span>Sensibilidade <output id="sensitivityOut">3.2×</output></span><input id="sensitivity" type="range" min="50" max="600" value="320" step="5" /></label>
-        <label class="control"><span>Sensibilidade dos médios <output id="midSensitivityOut">1.5×</output></span><input id="midSensitivity" type="range" min="0" max="400" value="150" step="5" /></label>
-        <label class="control"><span>Sensibilidade dos agudos <output id="highSensitivityOut">1.9×</output></span><input id="highSensitivity" type="range" min="0" max="400" value="190" step="5" /></label>
         <label class="control"><span>Attack <output id="attackOut">12 ms</output></span><input id="attack" type="range" min="1" max="250" value="12" step="1" /></label>
         <label class="control"><span>Release <output id="releaseOut">145 ms</output></span><input id="release" type="range" min="20" max="1000" value="145" step="5" /></label>
       </article>
@@ -129,16 +114,12 @@
           <h2>4. Onda fluida animada</h2>
           <label class="switch"><input id="waveEnabled" type="checkbox" checked /><span></span></label>
         </div>
-        <div class="two-buttons">
-          <button id="fkuPresetBtn" class="ghost compact" type="button">Aplicar preset FKU</button>
-          <button id="centerWaveBtn" class="primary compact" type="button">◎ Centralizar Wave</button>
-        </div>
+        <button id="fkuPresetBtn" class="ghost compact" type="button">Aplicar preset FKU</button>
         <label class="select-field">
           <span>Formato</span>
           <select id="waveStyle">
-            <option value="video" selected>Wave Motion em vídeo</option>
-            <option value="contour">Contornos topográficos gerados</option>
-            <option value="horizontal">Ondas horizontais geradas</option>
+            <option value="contour" selected>Contornos topográficos</option>
+            <option value="horizontal">Ondas horizontais</option>
           </select>
         </label>
         <label class="control"><span>Opacidade sem kick <output id="waveMinOpacityOut">2%</output></span><input id="waveMinOpacity" type="range" min="0" max="100" value="2" step="1" /></label>
@@ -150,63 +131,13 @@
         <label class="control"><span>Tamanho <output id="waveScaleOut">108%</output></span><input id="waveScale" type="range" min="35" max="180" value="108" step="1" /></label>
         <label class="control"><span>Espessura <output id="waveThicknessOut">4 px</output></span><input id="waveThickness" type="range" min="1" max="16" value="4" step="1" /></label>
         <label class="control"><span>Glow <output id="waveGlowOut">42 px</output></span><input id="waveGlow" type="range" min="0" max="100" value="42" step="1" /></label>
-        <label class="control"><span>Recorte do preto do vídeo <output id="waveThresholdOut">14%</output></span><input id="waveThreshold" type="range" min="0" max="50" value="14" step="1" /></label>
         <label class="control"><span>Posição horizontal <output id="wavePosXOut">50%</output></span><input id="wavePosX" type="range" min="0" max="100" value="50" step="1" /></label>
         <label class="control"><span>Posição vertical <output id="wavePosYOut">50%</output></span><input id="wavePosY" type="range" min="0" max="100" value="50" step="1" /></label>
-        <div class="color-grid">
-          <label class="color-field"><span>Cor da onda</span><input id="waveColor" type="color" value="#12cfff" /></label>
-          <label class="color-field"><span>Núcleo luminoso</span><input id="waveCoreColor" type="color" value="#ffffff" /></label>
-        </div>
-        <div class="color-chips" aria-label="Cores rápidas">
-          <button class="color-chip" type="button" data-wave-color="#9b35ff" data-core-color="#ffffff" style="--chip:#9b35ff" aria-label="Roxo"></button>
-          <button class="color-chip" type="button" data-wave-color="#12cfff" data-core-color="#ffffff" style="--chip:#12cfff" aria-label="Ciano"></button>
-          <button class="color-chip" type="button" data-wave-color="#ff284f" data-core-color="#fff0f3" style="--chip:#ff284f" aria-label="Vermelho"></button>
-          <button class="color-chip" type="button" data-wave-color="#ffd51e" data-core-color="#fffbe0" style="--chip:#ffd51e" aria-label="Amarelo"></button>
-          <button class="color-chip" type="button" data-wave-color="#ff3de2" data-core-color="#ffffff" style="--chip:#ff3de2" aria-label="Rosa"></button>
-        </div>
+        <label class="color-field"><span>Cor da onda</span><input id="waveColor" type="color" value="#9b35ff" /></label>
       </article>
 
       <article class="card panel">
-        <h2>5. Presets e intensidade</h2>
-        <label class="select-field"><span>Preset</span><select id="presetSelect">
-          <option value="favela" selected>FKU Favela</option><option value="impact">FKU Impact</option>
-          <option value="dream">FKU Dream</option><option value="clean">FKU Clean</option><option value="dark">FKU Dark</option>
-        </select></label>
-        <button id="applyPresetBtn" class="primary compact" type="button">Aplicar preset</button>
-        <label class="control"><span>Intensidade geral <output id="masterIntensityOut">100%</output></span><input id="masterIntensity" type="range" min="0" max="150" value="100" step="1" /></label>
-      </article>
-
-      <article class="card panel">
-        <div class="panel-title-row"><h2>6. Câmera e profundidade</h2><label class="switch"><input id="cameraEnabled" type="checkbox" checked /><span></span></label></div>
-        <label class="control"><span>Respiração da câmera <output id="cameraBreathingOut">2.0%</output></span><input id="cameraBreathing" type="range" min="0" max="80" value="20" step="1" /></label>
-        <label class="control"><span>Zoom no kick <output id="kickZoomOut">5.0%</output></span><input id="kickZoom" type="range" min="0" max="150" value="50" step="1" /></label>
-        <label class="control"><span>Shake no kick <output id="cameraShakeOut">1.2%</output></span><input id="cameraShake" type="range" min="0" max="80" value="12" step="1" /></label>
-        <div class="panel-title-row"><h3>Parallax 2.5D</h3><label class="switch"><input id="parallaxEnabled" type="checkbox" checked /><span></span></label></div>
-        <label class="control"><span>Profundidade <output id="parallaxAmountOut">1.0%</output></span><input id="parallaxAmount" type="range" min="0" max="60" value="10" step="1" /></label>
-      </article>
-
-      <article class="card panel">
-        <h2>7. Impacto visual</h2>
-        <div class="panel-title-row"><span>Flash de exposição</span><label class="switch"><input id="flashEnabled" type="checkbox" checked /><span></span></label></div>
-        <label class="control"><span>Flash <output id="flashAmountOut">28%</output></span><input id="flashAmount" type="range" min="0" max="100" value="28" step="1" /></label>
-        <div class="panel-title-row"><span>Focus pulse</span><label class="switch"><input id="blurEnabled" type="checkbox" checked /><span></span></label></div>
-        <label class="control"><span>Blur <output id="blurAmountOut">4.0 px</output></span><input id="blurAmount" type="range" min="0" max="150" value="40" step="1" /></label>
-        <div class="panel-title-row"><span>RGB Split</span><label class="switch"><input id="rgbEnabled" type="checkbox" checked /><span></span></label></div>
-        <label class="control"><span>Separação RGB <output id="rgbAmountOut">8 px</output></span><input id="rgbAmount" type="range" min="0" max="30" value="8" step="1" /></label>
-      </article>
-
-      <article class="card panel">
-        <h2>8. Glints e Energy Trails</h2>
-        <div class="panel-title-row"><span>Estrelas nos agudos</span><label class="switch"><input id="glintsEnabled" type="checkbox" checked /><span></span></label></div>
-        <label class="control"><span>Quantidade <output id="glintsAmountOut">18</output></span><input id="glintsAmount" type="range" min="0" max="64" value="18" step="1" /></label>
-        <label class="control"><span>Tamanho <output id="glintsSizeOut">18 px</output></span><input id="glintsSize" type="range" min="4" max="50" value="18" step="1" /></label>
-        <div class="panel-title-row"><span>Linhas laterais</span><label class="switch"><input id="trailsEnabled" type="checkbox" checked /><span></span></label></div>
-        <label class="control"><span>Intensidade <output id="trailsAmountOut">65%</output></span><input id="trailsAmount" type="range" min="0" max="100" value="65" step="1" /></label>
-        <label class="control"><span>Velocidade <output id="trailsSpeedOut">1.1×</output></span><input id="trailsSpeed" type="range" min="0" max="250" value="110" step="5" /></label>
-      </article>
-
-      <article class="card panel">
-        <h2>9. Primeiro plano adicional <small>(opcional)</small></h2>
+        <h2>5. Primeiro plano adicional <small>(opcional)</small></h2>
         <label class="file-field"><span>PNG transparente extra</span><input id="foregroundInput" type="file" accept="image/png,image/webp" /></label>
         <label class="control"><span>Escala <output id="foregroundScaleOut">100%</output></span><input id="foregroundScale" type="range" min="20" max="220" value="100" step="1" /></label>
         <label class="control"><span>Posição horizontal <output id="foregroundPosXOut">50%</output></span><input id="foregroundPosX" type="range" min="0" max="100" value="50" step="1" /></label>
@@ -217,7 +148,7 @@
       </article>
 
       <article class="card panel">
-        <h2>10. Projeto e exportação</h2>
+        <h2>6. Projeto e exportação</h2>
         <label class="select-field">
           <span>Resolução</span>
           <select id="resolution"><option value="720" selected>1280 × 720</option><option value="1080">1920 × 1080</option></select>
@@ -269,8 +200,7 @@
   </dialog>
 
   <video id="videoEl" playsinline preload="metadata" hidden></video>
-  <video id="waveVideoEl" src="kazu-wave-motion.mp4" playsinline muted loop preload="auto" crossorigin="anonymous" hidden></video>
   <audio id="audioEl" preload="metadata" hidden></audio>
-  <script src="app.js?v=4.1.0" defer></script>
+  <script src="app.js?v=4.2.0" defer></script>
 </body>
 </html>

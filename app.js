@@ -213,15 +213,35 @@ function previewDimensions() {
 }
 
 function setCanvasResolution() {
-  const dimensions = previewDimensions();
-  if (canvas.width === dimensions[0] && canvas.height === dimensions[1]) return;
-  canvas.width = dimensions[0];
-  canvas.height = dimensions[1];
-  for (const offscreen of [waveCanvas, waveSourceCanvas, waveCoreCanvas, maskedWaveCanvas, processedMaskCanvas, sourceFrameCanvas, protectedVideoCanvas]) {
-    offscreen.width = canvas.width;
-    offscreen.height = canvas.height;
+  const [width, height] = previewDimensions();
+  let resized = false;
+
+  // The visible canvas may already have the requested HTML width/height on first load.
+  // Offscreen canvases, however, start at the browser default 300×150. Returning early
+  // here used to leave the video tiny in the centre and the Wave Motion in the top-left.
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+    resized = true;
   }
-  maskCacheDirty = true;
+
+  for (const offscreen of [
+    waveCanvas,
+    waveSourceCanvas,
+    waveCoreCanvas,
+    maskedWaveCanvas,
+    processedMaskCanvas,
+    sourceFrameCanvas,
+    protectedVideoCanvas
+  ]) {
+    if (offscreen.width !== width || offscreen.height !== height) {
+      offscreen.width = width;
+      offscreen.height = height;
+      resized = true;
+    }
+  }
+
+  if (resized) maskCacheDirty = true;
 }
 
 function fitRect(sourceWidth, sourceHeight, targetWidth, targetHeight, fit = 'cover') {
@@ -1316,7 +1336,7 @@ function applyFkuPreset() {
 
 function saveLocalSettings() {
   try {
-    localStorage.setItem('kazuBeatFxSettingsV41', JSON.stringify({ settings: collectSettings() }));
+    localStorage.setItem('kazuBeatFxSettingsV42', JSON.stringify({ settings: collectSettings() }));
   } catch (_) {}
 }
 
@@ -1557,16 +1577,23 @@ window.addEventListener('pagehide', () => {
   objectUrls.forEach((url) => URL.revokeObjectURL(url));
 });
 
+const refreshCanvasLayout = () => {
+  setCanvasResolution();
+  requestRender();
+};
+window.addEventListener('resize', refreshCanvasLayout, { passive: true });
+window.addEventListener('orientationchange', refreshCanvasLayout, { passive: true });
+
 try {
-  const currentSaved = JSON.parse(localStorage.getItem('kazuBeatFxSettingsV41') || 'null');
-  const legacySaved = JSON.parse(localStorage.getItem('kazuBeatFxSettingsV40') || localStorage.getItem('kazuBeatFxSettingsV30') || 'null');
+  const currentSaved = JSON.parse(localStorage.getItem('kazuBeatFxSettingsV42') || 'null');
+  const legacySaved = JSON.parse(localStorage.getItem('kazuBeatFxSettingsV41') || localStorage.getItem('kazuBeatFxSettingsV40') || localStorage.getItem('kazuBeatFxSettingsV30') || 'null');
   const saved = currentSaved || legacySaved;
   if (saved?.settings) {
     const migrated = { ...saved.settings };
     if (!currentSaved) {
       migrated.waveStyle = 'video';
-      migrated.wavePosX = 50;
-      migrated.wavePosY = 50;
+      migrated.wavePosX = clamp(Number(migrated.wavePosX) || 50, 12, 88);
+      migrated.wavePosY = clamp(Number(migrated.wavePosY) || 50, 12, 88);
       migrated.waveScale = Math.max(112, Number(migrated.waveScale) || 112);
     }
     applySettings(migrated);
@@ -1580,7 +1607,7 @@ enableProjectControls();
 requestRender();
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-  navigator.serviceWorker.register('./service-worker.js?v=4.1.0').catch(() => {});
+  navigator.serviceWorker.register('./service-worker.js?v=4.2.0').catch(() => {});
 }
 
 if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) {
