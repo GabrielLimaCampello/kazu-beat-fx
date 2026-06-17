@@ -20,6 +20,10 @@ const maskedWaveCanvas = document.createElement('canvas');
 const maskedWaveCtx = maskedWaveCanvas.getContext('2d', { alpha: true, desynchronized: true });
 const processedMaskCanvas = document.createElement('canvas');
 const processedMaskCtx = processedMaskCanvas.getContext('2d', { alpha: true });
+const sourceFrameCanvas = document.createElement('canvas');
+const sourceFrameCtx = sourceFrameCanvas.getContext('2d', { alpha: false, desynchronized: true });
+const protectedVideoCanvas = document.createElement('canvas');
+const protectedVideoCtx = protectedVideoCanvas.getContext('2d', { alpha: true, desynchronized: true });
 
 // The mask is deliberately smaller than the output to keep painting responsive on iPhone.
 const maskCanvas = document.createElement('canvas');
@@ -36,7 +40,7 @@ const editorCanvas = $('maskEditorCanvas');
 const editorCtx = editorCanvas.getContext('2d');
 
 const ui = {
-  emptyState: $('emptyState'), meter: $('meter'), playBtn: $('playBtn'), stopBtn: $('stopBtn'),
+  emptyState: $('emptyState'), meter: $('meter'), lowMeter: $('lowMeter'), midMeter: $('midMeter'), highMeter: $('highMeter'), playBtn: $('playBtn'), stopBtn: $('stopBtn'),
   timeLabel: $('timeLabel'), seek: $('seek'), exportBtn: $('exportBtn'), exportStatus: $('exportStatus'),
   videoInput: $('videoInput'), audioInput: $('audioInput'), foregroundInput: $('foregroundInput'),
   videoFit: $('videoFit'), resolution: $('resolution'), previewQuality: $('previewQuality'),
@@ -46,7 +50,7 @@ const ui = {
   maskExpand: $('maskExpand'), maskStatus: $('maskStatus'),
 
   reactiveEnabled: $('reactiveEnabled'), detectorMode: $('detectorMode'), lowHz: $('lowHz'), highHz: $('highHz'),
-  threshold: $('threshold'), sensitivity: $('sensitivity'), attack: $('attack'), release: $('release'),
+  threshold: $('threshold'), sensitivity: $('sensitivity'), midSensitivity: $('midSensitivity'), highSensitivity: $('highSensitivity'), attack: $('attack'), release: $('release'),
 
   waveEnabled: $('waveEnabled'), waveStyle: $('waveStyle'), waveMinOpacity: $('waveMinOpacity'),
   waveMaxOpacity: $('waveMaxOpacity'), waveSpeed: $('waveSpeed'), waveCount: $('waveCount'),
@@ -54,6 +58,14 @@ const ui = {
   waveThickness: $('waveThickness'), waveGlow: $('waveGlow'), wavePosX: $('wavePosX'),
   wavePosY: $('wavePosY'), waveColor: $('waveColor'), waveCoreColor: $('waveCoreColor'),
   waveThreshold: $('waveThreshold'), fkuPresetBtn: $('fkuPresetBtn'),
+
+  presetSelect: $('presetSelect'), applyPresetBtn: $('applyPresetBtn'), masterIntensity: $('masterIntensity'),
+  cameraEnabled: $('cameraEnabled'), cameraBreathing: $('cameraBreathing'), kickZoom: $('kickZoom'),
+  cameraShake: $('cameraShake'), parallaxEnabled: $('parallaxEnabled'), parallaxAmount: $('parallaxAmount'),
+  flashEnabled: $('flashEnabled'), flashAmount: $('flashAmount'), blurEnabled: $('blurEnabled'),
+  blurAmount: $('blurAmount'), rgbEnabled: $('rgbEnabled'), rgbAmount: $('rgbAmount'),
+  glintsEnabled: $('glintsEnabled'), glintsAmount: $('glintsAmount'), glintsSize: $('glintsSize'),
+  trailsEnabled: $('trailsEnabled'), trailsAmount: $('trailsAmount'), trailsSpeed: $('trailsSpeed'),
 
   foregroundScale: $('foregroundScale'), foregroundPosX: $('foregroundPosX'), foregroundPosY: $('foregroundPosY'),
   foregroundRotation: $('foregroundRotation'), foregroundOpacity: $('foregroundOpacity'),
@@ -75,6 +87,8 @@ const outputs = {
   highHz: ['highHzOut', (v) => `${v} Hz`],
   threshold: ['thresholdOut', (v) => `${v}%`],
   sensitivity: ['sensitivityOut', (v) => `${(v / 100).toFixed(1)}×`],
+  midSensitivity: ['midSensitivityOut', (v) => `${(v / 100).toFixed(1)}×`],
+  highSensitivity: ['highSensitivityOut', (v) => `${(v / 100).toFixed(1)}×`],
   attack: ['attackOut', (v) => `${v} ms`],
   release: ['releaseOut', (v) => `${v} ms`],
   waveMinOpacity: ['waveMinOpacityOut', (v) => `${v}%`],
@@ -95,6 +109,18 @@ const outputs = {
   foregroundRotation: ['foregroundRotationOut', (v) => `${v}°`],
   foregroundOpacity: ['foregroundOpacityOut', (v) => `${v}%`],
   foregroundKickZoom: ['foregroundKickZoomOut', (v) => `${v}%`],
+  masterIntensity: ['masterIntensityOut', (v) => `${v}%`],
+  cameraBreathing: ['cameraBreathingOut', (v) => `${(v / 10).toFixed(1)}%`],
+  kickZoom: ['kickZoomOut', (v) => `${(v / 10).toFixed(1)}%`],
+  cameraShake: ['cameraShakeOut', (v) => `${(v / 10).toFixed(1)}%`],
+  parallaxAmount: ['parallaxAmountOut', (v) => `${(v / 10).toFixed(1)}%`],
+  flashAmount: ['flashAmountOut', (v) => `${v}%`],
+  blurAmount: ['blurAmountOut', (v) => `${(v / 10).toFixed(1)} px`],
+  rgbAmount: ['rgbAmountOut', (v) => `${v} px`],
+  glintsAmount: ['glintsAmountOut', (v) => `${v}`],
+  glintsSize: ['glintsSizeOut', (v) => `${v} px`],
+  trailsAmount: ['trailsAmountOut', (v) => `${v}%`],
+  trailsSpeed: ['trailsSpeedOut', (v) => `${(v / 100).toFixed(1)}×`],
   brushSize: ['brushSizeOut', (v) => `${v} px`]
 };
 
@@ -104,8 +130,15 @@ let foregroundImage = null;
 let playing = false;
 let exporting = false;
 let envelope = 0;
+let midEnvelope = 0;
+let highEnvelope = 0;
 let rawEnergy = 0;
+let midEnergy = 0;
+let highEnergy = 0;
 let energyBaseline = 0;
+let midBaseline = 0;
+let highBaseline = 0;
+let frameCounter = 0;
 let lastFrameTime = performance.now();
 let audioContext = null;
 let analyser = null;
@@ -131,6 +164,12 @@ let editorPointer = null;
 let undoStack = [];
 let redoStack = [];
 const objectUrls = [];
+const glintSeeds = Array.from({ length: 64 }, (_, index) => ({
+  x: ((index * 37) % 97) / 97,
+  y: ((index * 53 + 17) % 89) / 89,
+  phase: (index * 1.618) % (Math.PI * 2),
+  size: 0.55 + ((index * 19) % 11) / 10
+}));
 
 function setStatus(message, type = '') {
   ui.exportStatus.textContent = message;
@@ -178,7 +217,7 @@ function setCanvasResolution() {
   if (canvas.width === dimensions[0] && canvas.height === dimensions[1]) return;
   canvas.width = dimensions[0];
   canvas.height = dimensions[1];
-  for (const offscreen of [waveCanvas, waveSourceCanvas, waveCoreCanvas, maskedWaveCanvas, processedMaskCanvas]) {
+  for (const offscreen of [waveCanvas, waveSourceCanvas, waveCoreCanvas, maskedWaveCanvas, processedMaskCanvas, sourceFrameCanvas, protectedVideoCanvas]) {
     offscreen.width = canvas.width;
     offscreen.height = canvas.height;
   }
@@ -203,11 +242,108 @@ function fitRect(sourceWidth, sourceHeight, targetWidth, targetHeight, fit = 'co
 }
 
 function drawVideoTo(targetCtx, targetCanvas) {
+  targetCtx.save();
+  targetCtx.filter = 'none';
+  targetCtx.globalAlpha = 1;
+  targetCtx.globalCompositeOperation = 'source-over';
   targetCtx.fillStyle = '#000';
   targetCtx.fillRect(0, 0, targetCanvas.width, targetCanvas.height);
-  if (!hasVideo || video.readyState < 2 || !video.videoWidth || !video.videoHeight) return;
-  const rect = fitRect(video.videoWidth, video.videoHeight, targetCanvas.width, targetCanvas.height, ui.videoFit.value);
-  targetCtx.drawImage(video, rect.x, rect.y, rect.width, rect.height);
+  if (hasVideo && video.readyState >= 2 && video.videoWidth && video.videoHeight) {
+    const rect = fitRect(video.videoWidth, video.videoHeight, targetCanvas.width, targetCanvas.height, ui.videoFit.value);
+    targetCtx.drawImage(video, rect.x, rect.y, rect.width, rect.height);
+  }
+  targetCtx.restore();
+}
+
+function masterFx() {
+  return numeric(ui.masterIntensity) / 100;
+}
+
+function economyMode() {
+  return !exporting && ui.previewQuality.value === 'economy';
+}
+
+function prepareSourceFrame() {
+  drawVideoTo(sourceFrameCtx, sourceFrameCanvas);
+}
+
+function cameraTransform(foreground = false) {
+  const enabled = ui.cameraEnabled.checked;
+  const time = video.currentTime || 0;
+  const master = masterFx();
+  const breathing = enabled ? numeric(ui.cameraBreathing) / 1000 * master : 0;
+  const kickZoom = enabled ? numeric(ui.kickZoom) / 1000 * envelope * master : 0;
+  const breatheWave = 0.5 + 0.5 * Math.sin(time * 0.72 - 0.45);
+  const scale = 1 + breathing * breatheWave + kickZoom;
+  const shake = enabled ? numeric(ui.cameraShake) / 1000 * envelope * master : 0;
+  const parallax = ui.parallaxEnabled.checked ? numeric(ui.parallaxAmount) / 1000 * master : 0;
+  const direction = foreground ? -0.72 : 0.45;
+  const driftX = canvas.width * parallax * direction * Math.sin(time * 0.47 + 0.8);
+  const driftY = canvas.height * parallax * direction * Math.cos(time * 0.39 - 0.2);
+  const shakeX = canvas.width * shake * Math.sin(time * 41.0 + midEnvelope * 7.0);
+  const shakeY = canvas.height * shake * 0.58 * Math.cos(time * 47.0 + envelope * 5.0);
+  return { scale: foreground ? 1 + breathing * breatheWave * 0.30 + kickZoom * 0.38 : scale, x: driftX + shakeX, y: driftY + shakeY };
+}
+
+function drawSourceTransformed(targetCtx, transform, offsetX = 0, offsetY = 0) {
+  const width = sourceFrameCanvas.width * transform.scale;
+  const height = sourceFrameCanvas.height * transform.scale;
+  const x = (targetCtx.canvas.width - width) / 2 + transform.x + offsetX;
+  const y = (targetCtx.canvas.height - height) / 2 + transform.y + offsetY;
+  targetCtx.drawImage(sourceFrameCanvas, x, y, width, height);
+}
+
+function drawVideoWithEffects() {
+  ctx.save();
+  ctx.filter = 'none';
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (!hasVideo || video.readyState < 2) {
+    ctx.restore();
+    return;
+  }
+
+  const transform = cameraTransform(false);
+  const master = masterFx();
+  const rgbStrength = ui.rgbEnabled.checked ? numeric(ui.rgbAmount) * midEnvelope * master : 0;
+  const skipHeavy = economyMode() && frameCounter % 2 === 1;
+
+  if (rgbStrength > 0.25 && !skipHeavy) {
+    const split = rgbStrength * canvas.width / 1280;
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = clamp(0.04 + midEnvelope * 0.15 * master, 0, 0.28);
+    ctx.filter = 'sepia(1) saturate(8) hue-rotate(305deg) contrast(145%)';
+    drawSourceTransformed(ctx, transform, split, 0);
+    ctx.filter = 'sepia(1) saturate(8) hue-rotate(125deg) contrast(145%)';
+    drawSourceTransformed(ctx, transform, -split, 0);
+  }
+
+  const flash = ui.flashEnabled.checked ? numeric(ui.flashAmount) / 100 * envelope * master : 0;
+  const blur = ui.blurEnabled.checked && !skipHeavy ? numeric(ui.blurAmount) / 10 * envelope * master : 0;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.filter = `${blur > 0.05 ? `blur(${Math.min(10, blur)}px) ` : ''}brightness(${100 + flash * 34}%) contrast(${100 + flash * 12}%) saturate(${100 + flash * 24}%)`;
+  drawSourceTransformed(ctx, transform);
+  ctx.restore();
+}
+
+function drawProtectedParallaxLayer() {
+  if (!ui.parallaxEnabled.checked || !ui.maskEnabled.checked || !maskHasContent) return;
+  if (maskCacheDirty) rebuildProcessedMask();
+  protectedVideoCtx.clearRect(0, 0, protectedVideoCanvas.width, protectedVideoCanvas.height);
+  protectedVideoCtx.save();
+  protectedVideoCtx.globalCompositeOperation = 'source-over';
+  protectedVideoCtx.filter = 'none';
+  drawSourceTransformed(protectedVideoCtx, cameraTransform(true));
+  protectedVideoCtx.globalCompositeOperation = 'destination-in';
+  protectedVideoCtx.drawImage(processedMaskCanvas, 0, 0);
+  protectedVideoCtx.restore();
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.drawImage(protectedVideoCanvas, 0, 0);
+  ctx.restore();
 }
 
 async function ensureAudioGraph() {
@@ -241,49 +377,72 @@ async function ensureAudioGraph() {
   if (audioContext.state === 'suspended') await audioContext.resume();
 }
 
+function averageBand(fromHz, toHz, tilt = 0) {
+  if (!analyser || !frequencyData || !audioContext) return 0;
+  const binHz = audioContext.sampleRate / analyser.fftSize;
+  const lowBin = Math.max(0, Math.floor(fromHz / binHz));
+  const highBin = Math.min(frequencyData.length - 1, Math.ceil(toHz / binHz));
+  let energy = 0;
+  let totalWeight = 0;
+  for (let index = lowBin; index <= highBin; index += 1) {
+    const normalized = (index - lowBin) / Math.max(1, highBin - lowBin);
+    const weight = 1 + tilt * (0.5 - normalized);
+    energy += (frequencyData[index] / 255) * weight;
+    totalWeight += weight;
+  }
+  return totalWeight ? energy / totalWeight : 0;
+}
+
+function smoothEnvelope(current, target, deltaSeconds, attackSeconds, releaseSeconds) {
+  const timeConstant = target > current ? attackSeconds : releaseSeconds;
+  const alpha = 1 - Math.exp(-deltaSeconds / Math.max(0.001, timeConstant));
+  return clamp(current + (target - current) * alpha, 0, 1);
+}
+
 function computeKick(deltaSeconds) {
   if (!analyser || !frequencyData || !playing) {
     rawEnergy = 0;
+    midEnergy = 0;
+    highEnergy = 0;
   } else {
     analyser.getByteFrequencyData(frequencyData);
-    const binHz = audioContext.sampleRate / analyser.fftSize;
-    const lowBin = Math.max(0, Math.floor(numeric(ui.lowHz) / binHz));
-    const highBin = Math.min(frequencyData.length - 1, Math.ceil(numeric(ui.highHz) / binHz));
-    let energy = 0;
-    let totalWeight = 0;
-
-    for (let index = lowBin; index <= highBin; index += 1) {
-      const normalized = (index - lowBin) / Math.max(1, highBin - lowBin);
-      const weight = 1.48 - normalized * 0.68;
-      energy += (frequencyData[index] / 255) * weight;
-      totalWeight += weight;
-    }
-    rawEnergy = totalWeight > 0 ? energy / totalWeight : 0;
+    rawEnergy = averageBand(numeric(ui.lowHz), numeric(ui.highHz), 0.75);
+    midEnergy = averageBand(150, 2600, 0.12);
+    highEnergy = averageBand(4200, Math.min(14500, audioContext.sampleRate * 0.46), -0.08);
   }
 
-  const baselineAlpha = 1 - Math.exp(-deltaSeconds / 0.65);
-  energyBaseline += (rawEnergy - energyBaseline) * baselineAlpha;
+  const lowBaselineAlpha = 1 - Math.exp(-deltaSeconds / 0.68);
+  const midBaselineAlpha = 1 - Math.exp(-deltaSeconds / 0.90);
+  const highBaselineAlpha = 1 - Math.exp(-deltaSeconds / 0.55);
+  energyBaseline += (rawEnergy - energyBaseline) * lowBaselineAlpha;
+  midBaseline += (midEnergy - midBaseline) * midBaselineAlpha;
+  highBaseline += (highEnergy - highBaseline) * highBaselineAlpha;
 
-  let detectorValue = rawEnergy;
+  let lowDetector = rawEnergy;
   if (ui.detectorMode.value === 'transient') {
     const transient = Math.max(0, rawEnergy - energyBaseline * 0.90);
-    detectorValue = clamp(transient * 5.5 + rawEnergy * 0.20, 0, 1);
+    lowDetector = clamp(transient * 5.6 + rawEnergy * 0.20, 0, 1);
   }
 
   const threshold = numeric(ui.threshold) / 100;
-  const sensitivity = numeric(ui.sensitivity) / 100;
-  const target = detectorValue <= threshold
-    ? 0
-    : clamp(((detectorValue - threshold) / Math.max(0.001, 1 - threshold)) * sensitivity, 0, 1);
+  const lowSensitivity = numeric(ui.sensitivity) / 100;
+  const midSensitivity = numeric(ui.midSensitivity) / 100;
+  const highSensitivity = numeric(ui.highSensitivity) / 100;
+  const lowTarget = lowDetector <= threshold ? 0 : clamp(((lowDetector - threshold) / Math.max(0.001, 1 - threshold)) * lowSensitivity, 0, 1);
+  const midTransient = Math.max(0, midEnergy - midBaseline * 0.86);
+  const highTransient = Math.max(0, highEnergy - highBaseline * 0.82);
+  const midTarget = clamp((midTransient * 3.2 + midEnergy * 0.36) * midSensitivity, 0, 1);
+  const highTarget = clamp((highTransient * 3.8 + highEnergy * 0.22) * highSensitivity, 0, 1);
 
-  const attack = Math.max(0.001, numeric(ui.attack) / 1000);
-  const release = Math.max(0.001, numeric(ui.release) / 1000);
-  const timeConstant = target > envelope ? attack : release;
-  const alpha = 1 - Math.exp(-deltaSeconds / timeConstant);
-  envelope += (target - envelope) * alpha;
-  envelope = clamp(envelope, 0, 1);
+  envelope = smoothEnvelope(envelope, lowTarget, deltaSeconds, numeric(ui.attack) / 1000, numeric(ui.release) / 1000);
+  midEnvelope = smoothEnvelope(midEnvelope, midTarget, deltaSeconds, 0.026, 0.20);
+  highEnvelope = smoothEnvelope(highEnvelope, highTarget, deltaSeconds, 0.009, 0.105);
 
-  if (!ui.reactiveEnabled.checked) envelope = 1;
+  if (!ui.reactiveEnabled.checked) {
+    envelope = 1;
+    midEnvelope = 1;
+    highEnvelope = 1;
+  }
 }
 
 function hexToRgb(hex) {
@@ -447,18 +606,95 @@ function drawGeneratedWaveLayer(opacity, pulseScale) {
   waveCtx.restore();
 }
 
+
+function drawEnergyTrails() {
+  if (!ui.trailsEnabled.checked) return;
+  const master = masterFx();
+  const strength = numeric(ui.trailsAmount) / 100 * midEnvelope * master;
+  if (strength <= 0.015) return;
+  const time = video.currentTime * numeric(ui.trailsSpeed) / 100;
+  const color = hexToRgb(ui.waveColor.value);
+  const lineCount = economyMode() ? 3 : 6;
+  const w = waveCanvas.width;
+  const h = waveCanvas.height;
+  waveCtx.save();
+  waveCtx.globalCompositeOperation = 'screen';
+  waveCtx.lineCap = 'round';
+  for (let index = 0; index < lineCount; index += 1) {
+    const side = index % 2 === 0 ? -1 : 1;
+    const phase = time * (0.72 + index * 0.045) + index * 1.37;
+    const startX = side < 0 ? -w * 0.08 : w * 1.08;
+    const endX = w * (0.36 + 0.30 * (0.5 + 0.5 * Math.sin(phase * 0.37 + index)));
+    const y = h * (0.16 + ((index * 0.139 + 0.11) % 0.68));
+    const bend = h * (0.05 + 0.10 * Math.sin(phase + index));
+    waveCtx.beginPath();
+    waveCtx.moveTo(startX, y + bend);
+    waveCtx.bezierCurveTo(
+      side < 0 ? w * 0.10 : w * 0.90,
+      y - bend,
+      side < 0 ? w * 0.28 : w * 0.72,
+      y + bend * 0.7,
+      endX,
+      y - bend * 0.35
+    );
+    waveCtx.globalAlpha = strength * (0.20 + 0.12 * Math.sin(phase * 1.9 + index));
+    waveCtx.strokeStyle = `rgb(${color.r},${color.g},${color.b})`;
+    waveCtx.lineWidth = Math.max(1, waveCanvas.width / 1280 * (1.2 + index % 3));
+    waveCtx.shadowColor = `rgb(${color.r},${color.g},${color.b})`;
+    waveCtx.shadowBlur = waveCanvas.width / 1280 * (10 + 14 * strength);
+    waveCtx.stroke();
+  }
+  waveCtx.restore();
+}
+
+function drawGlints() {
+  if (!ui.glintsEnabled.checked) return;
+  const master = masterFx();
+  const intensity = highEnvelope * master;
+  if (intensity <= 0.02) return;
+  const amount = Math.min(glintSeeds.length, Math.round(numeric(ui.glintsAmount) * (economyMode() ? 0.55 : 1)));
+  const baseSize = numeric(ui.glintsSize) * waveCanvas.width / 1280;
+  const time = video.currentTime || 0;
+  const color = hexToRgb(ui.waveCoreColor.value);
+  waveCtx.save();
+  waveCtx.globalCompositeOperation = 'screen';
+  waveCtx.lineCap = 'round';
+  for (let index = 0; index < amount; index += 1) {
+    const seed = glintSeeds[index];
+    const twinkle = Math.max(0, Math.sin(time * (4.2 + (index % 5) * 0.37) + seed.phase));
+    const alpha = intensity * twinkle * (0.32 + 0.68 * highEnvelope);
+    if (alpha < 0.06) continue;
+    const x = seed.x * waveCanvas.width;
+    const y = seed.y * waveCanvas.height;
+    const size = baseSize * seed.size * (0.45 + alpha);
+    waveCtx.strokeStyle = `rgba(${color.r},${color.g},${color.b},${clamp(alpha,0,1)})`;
+    waveCtx.shadowColor = ui.waveColor.value;
+    waveCtx.shadowBlur = size * 0.85;
+    waveCtx.lineWidth = Math.max(1, size * 0.11);
+    waveCtx.beginPath();
+    waveCtx.moveTo(x - size, y);
+    waveCtx.lineTo(x + size, y);
+    waveCtx.moveTo(x, y - size);
+    waveCtx.lineTo(x, y + size);
+    waveCtx.stroke();
+  }
+  waveCtx.restore();
+}
+
 function drawWaveLayer() {
   waveCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
   if (!ui.waveEnabled.checked) return;
 
   const minimumOpacity = numeric(ui.waveMinOpacity) / 100;
   const maximumOpacity = numeric(ui.waveMaxOpacity) / 100;
-  const opacity = minimumOpacity + (maximumOpacity - minimumOpacity) * envelope;
-  if (opacity <= 0.001) return;
-
-  const pulseScale = 1 + numeric(ui.wavePulse) / 100 * envelope;
-  if (ui.waveStyle.value === 'video' && drawVideoWaveLayer(opacity, pulseScale)) return;
-  drawGeneratedWaveLayer(opacity, pulseScale);
+  const opacity = clamp((minimumOpacity + (maximumOpacity - minimumOpacity) * envelope) * masterFx(), 0, 1);
+  const pulseScale = 1 + numeric(ui.wavePulse) / 100 * envelope * masterFx();
+  if (opacity > 0.001) {
+    const usedVideo = ui.waveStyle.value === 'video' && drawVideoWaveLayer(opacity, pulseScale);
+    if (!usedVideo) drawGeneratedWaveLayer(opacity, pulseScale);
+  }
+  drawEnergyTrails();
+  drawGlints();
 }
 function rebuildProcessedMask() {
   processedMaskCtx.clearRect(0, 0, processedMaskCanvas.width, processedMaskCanvas.height);
@@ -540,14 +776,35 @@ function syncWaveVideo() {
   if (!playing || wrappedDistance > 0.22) waveVideo.currentTime = target;
 }
 
+
+function drawImpactOverlay() {
+  if (!ui.flashEnabled.checked) return;
+  const master = masterFx();
+  const amount = numeric(ui.flashAmount) / 100 * master;
+  const flash = clamp(envelope * 0.72 + highEnvelope * 0.34, 0, 1) * amount;
+  if (flash <= 0.006) return;
+  const color = hexToRgb(ui.waveCoreColor.value);
+  const gradient = ctx.createRadialGradient(canvas.width * 0.5, canvas.height * 0.48, 0, canvas.width * 0.5, canvas.height * 0.48, Math.max(canvas.width, canvas.height) * 0.72);
+  gradient.addColorStop(0, `rgba(${color.r},${color.g},${color.b},${flash * 0.24})`);
+  gradient.addColorStop(0.52, `rgba(${color.r},${color.g},${color.b},${flash * 0.09})`);
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.restore();
+}
+
 function renderFrame(now = performance.now()) {
   const deltaSeconds = clamp((now - lastFrameTime) / 1000, 0.001, 0.12);
   lastFrameTime = now;
+  frameCounter += 1;
   setCanvasResolution();
   computeKick(deltaSeconds);
   syncWaveVideo();
 
-  drawVideoTo(ctx, canvas);
+  prepareSourceFrame();
+  drawVideoWithEffects();
   drawWaveLayer();
   applyMaskToWave();
 
@@ -555,9 +812,14 @@ function renderFrame(now = performance.now()) {
   ctx.globalCompositeOperation = 'screen';
   ctx.drawImage(maskedWaveCanvas, 0, 0);
   ctx.restore();
+  drawProtectedParallaxLayer();
   drawForeground();
+  drawImpactOverlay();
 
   ui.meter.style.width = `${Math.round(envelope * 100)}%`;
+  if (ui.lowMeter) ui.lowMeter.style.width = `${Math.round(envelope * 100)}%`;
+  if (ui.midMeter) ui.midMeter.style.width = `${Math.round(midEnvelope * 100)}%`;
+  if (ui.highMeter) ui.highMeter.style.width = `${Math.round(highEnvelope * 100)}%`;
   const duration = projectDuration();
   ui.timeLabel.textContent = `${formatTime(video.currentTime)} / ${formatTime(duration)}`;
   if (duration > 0 && !ui.seek.matches(':active')) {
@@ -684,6 +946,8 @@ function stopPlayback() {
   video.currentTime = 0;
   if (hasExternalAudio) audio.currentTime = 0;
   envelope = 0;
+  midEnvelope = 0;
+  highEnvelope = 0;
   if (Number.isFinite(waveVideo.duration)) waveVideo.currentTime = 0;
   requestRender();
 }
@@ -905,10 +1169,14 @@ editorCanvas.addEventListener('pointerleave', () => {
 function settingKeys() {
   return [
     'videoFit', 'resolution', 'previewQuality', 'maskEnabled', 'maskFeather', 'maskExpand',
-    'reactiveEnabled', 'detectorMode', 'lowHz', 'highHz', 'threshold', 'sensitivity', 'attack', 'release',
+    'reactiveEnabled', 'detectorMode', 'lowHz', 'highHz', 'threshold', 'sensitivity', 'midSensitivity',
+    'highSensitivity', 'attack', 'release', 'masterIntensity',
     'waveEnabled', 'waveStyle', 'waveMinOpacity', 'waveMaxOpacity', 'waveSpeed', 'waveCount',
     'waveDeform', 'wavePulse', 'waveScale', 'waveThickness', 'waveGlow', 'waveThreshold', 'wavePosX', 'wavePosY',
     'waveColor', 'waveCoreColor',
+    'cameraEnabled', 'cameraBreathing', 'kickZoom', 'cameraShake', 'parallaxEnabled', 'parallaxAmount',
+    'flashEnabled', 'flashAmount', 'blurEnabled', 'blurAmount', 'rgbEnabled', 'rgbAmount',
+    'glintsEnabled', 'glintsAmount', 'glintsSize', 'trailsEnabled', 'trailsAmount', 'trailsSpeed',
     'foregroundScale', 'foregroundPosX', 'foregroundPosY', 'foregroundRotation', 'foregroundOpacity',
     'foregroundKickZoom'
   ];
@@ -925,7 +1193,7 @@ function collectSettings() {
 function collectProject() {
   return {
     app: 'Kazu Beat FX',
-    version: '3.0',
+    version: '4.0',
     createdAt: new Date().toISOString(),
     note: 'Os arquivos de vídeo e áudio não ficam dentro do JSON; selecione-os novamente.',
     settings: collectSettings(),
@@ -959,24 +1227,80 @@ async function restoreMaskFromDataUrl(dataUrl) {
   updateMaskStatus();
 }
 
-function applyFkuPreset() {
-  applySettings({
+const PRESETS = {
+  favela: {
     videoFit: 'cover', maskEnabled: true, maskFeather: 8, maskExpand: 5,
-    reactiveEnabled: true, detectorMode: 'transient', lowHz: 45, highHz: 100,
-    threshold: 18, sensitivity: 320, attack: 12, release: 145,
-    previewQuality: 'auto', waveEnabled: true, waveStyle: 'video', waveMinOpacity: 0, waveMaxOpacity: 100,
-    waveSpeed: 100, waveCount: 7, waveDeform: 46, wavePulse: 10, waveScale: 112,
-    waveThickness: 4, waveGlow: 28, waveThreshold: 12, wavePosX: 50, wavePosY: 50,
-    waveColor: '#8b35ff', waveCoreColor: '#ffffff',
-    foregroundScale: 100, foregroundPosX: 50, foregroundPosY: 50,
-    foregroundRotation: 0, foregroundOpacity: 100, foregroundKickZoom: 2
-  });
-  setStatus('Preset FKU aplicado. Pinte a máscara sobre personagem e texto.', 'ok');
+    reactiveEnabled: true, detectorMode: 'transient', lowHz: 45, highHz: 105, threshold: 18,
+    sensitivity: 320, midSensitivity: 150, highSensitivity: 190, attack: 12, release: 145,
+    masterIntensity: 100, waveEnabled: true, waveStyle: 'video', waveMinOpacity: 0, waveMaxOpacity: 100,
+    waveSpeed: 100, waveCount: 7, waveDeform: 46, wavePulse: 12, waveScale: 112,
+    waveThickness: 4, waveGlow: 38, waveThreshold: 14, wavePosX: 50, wavePosY: 50,
+    waveColor: '#12cfff', waveCoreColor: '#ffffff',
+    cameraEnabled: true, cameraBreathing: 20, kickZoom: 50, cameraShake: 12,
+    parallaxEnabled: true, parallaxAmount: 10,
+    flashEnabled: true, flashAmount: 28, blurEnabled: true, blurAmount: 40,
+    rgbEnabled: true, rgbAmount: 8, glintsEnabled: true, glintsAmount: 18, glintsSize: 18,
+    trailsEnabled: true, trailsAmount: 65, trailsSpeed: 110
+  },
+  impact: {
+    detectorMode: 'transient', lowHz: 38, highHz: 115, threshold: 16, sensitivity: 380,
+    midSensitivity: 185, highSensitivity: 220, attack: 7, release: 115, masterIntensity: 120,
+    waveStyle: 'video', waveMinOpacity: 0, waveMaxOpacity: 100, waveSpeed: 125, wavePulse: 18,
+    waveScale: 116, waveGlow: 48, waveThreshold: 16, waveColor: '#a22cff', waveCoreColor: '#ffffff',
+    cameraEnabled: true, cameraBreathing: 15, kickZoom: 82, cameraShake: 24,
+    parallaxEnabled: true, parallaxAmount: 14, flashEnabled: true, flashAmount: 46,
+    blurEnabled: true, blurAmount: 68, rgbEnabled: true, rgbAmount: 16,
+    glintsEnabled: true, glintsAmount: 26, glintsSize: 22, trailsEnabled: true,
+    trailsAmount: 88, trailsSpeed: 145
+  },
+  dream: {
+    detectorMode: 'energy', lowHz: 35, highHz: 125, threshold: 12, sensitivity: 220,
+    midSensitivity: 115, highSensitivity: 130, attack: 28, release: 280, masterIntensity: 90,
+    waveStyle: 'video', waveMinOpacity: 4, waveMaxOpacity: 82, waveSpeed: 72, wavePulse: 8,
+    waveScale: 120, waveGlow: 62, waveThreshold: 10, waveColor: '#7657ff', waveCoreColor: '#e9f4ff',
+    cameraEnabled: true, cameraBreathing: 30, kickZoom: 28, cameraShake: 3,
+    parallaxEnabled: true, parallaxAmount: 12, flashEnabled: true, flashAmount: 12,
+    blurEnabled: true, blurAmount: 28, rgbEnabled: true, rgbAmount: 4,
+    glintsEnabled: true, glintsAmount: 16, glintsSize: 20, trailsEnabled: true,
+    trailsAmount: 46, trailsSpeed: 70
+  },
+  clean: {
+    detectorMode: 'transient', lowHz: 45, highHz: 100, threshold: 20, sensitivity: 280,
+    midSensitivity: 90, highSensitivity: 105, attack: 14, release: 160, masterIntensity: 78,
+    waveStyle: 'video', waveMinOpacity: 0, waveMaxOpacity: 78, waveSpeed: 90, wavePulse: 8,
+    waveScale: 108, waveGlow: 24, waveThreshold: 15, waveColor: '#9b35ff', waveCoreColor: '#ffffff',
+    cameraEnabled: true, cameraBreathing: 12, kickZoom: 28, cameraShake: 3,
+    parallaxEnabled: true, parallaxAmount: 6, flashEnabled: true, flashAmount: 10,
+    blurEnabled: true, blurAmount: 12, rgbEnabled: true, rgbAmount: 3,
+    glintsEnabled: true, glintsAmount: 8, glintsSize: 14, trailsEnabled: true,
+    trailsAmount: 28, trailsSpeed: 90
+  },
+  dark: {
+    detectorMode: 'transient', lowHz: 40, highHz: 110, threshold: 19, sensitivity: 350,
+    midSensitivity: 165, highSensitivity: 135, attack: 10, release: 165, masterIntensity: 105,
+    waveStyle: 'video', waveMinOpacity: 0, waveMaxOpacity: 92, waveSpeed: 92, wavePulse: 13,
+    waveScale: 114, waveGlow: 46, waveThreshold: 18, waveColor: '#ff284f', waveCoreColor: '#fff0f3',
+    cameraEnabled: true, cameraBreathing: 17, kickZoom: 54, cameraShake: 15,
+    parallaxEnabled: true, parallaxAmount: 11, flashEnabled: true, flashAmount: 24,
+    blurEnabled: true, blurAmount: 46, rgbEnabled: true, rgbAmount: 12,
+    glintsEnabled: true, glintsAmount: 10, glintsSize: 17, trailsEnabled: true,
+    trailsAmount: 74, trailsSpeed: 100
+  }
+};
+
+function applyNamedPreset(name) {
+  const preset = PRESETS[name] || PRESETS.favela;
+  applySettings(preset);
+  setStatus(`Preset ${name.toUpperCase()} aplicado. Ajuste as cores e a máscara para o seu vídeo.`, 'ok');
+}
+
+function applyFkuPreset() {
+  applyNamedPreset('favela');
 }
 
 function saveLocalSettings() {
   try {
-    localStorage.setItem('kazuBeatFxSettingsV30', JSON.stringify({ settings: collectSettings() }));
+    localStorage.setItem('kazuBeatFxSettingsV40', JSON.stringify({ settings: collectSettings() }));
   } catch (_) {}
 }
 
@@ -1040,7 +1364,7 @@ async function exportVideo() {
       const type = mediaRecorder.mimeType || mimeType || 'video/webm';
       const extension = type.includes('mp4') ? 'mp4' : 'webm';
       const blob = new Blob(recordedChunks, { type });
-      downloadBlob(blob, `Kazu-Beat-FX-v3-${Date.now()}.${extension}`);
+      downloadBlob(blob, `Kazu-Beat-FX-v4-${Date.now()}.${extension}`);
       setStatus(`Exportação concluída (${(blob.size / 1024 / 1024).toFixed(1)} MB).`, 'ok');
       ui.exportBtn.disabled = false;
       ui.exportBtn.textContent = 'Exportar vídeo';
@@ -1122,6 +1446,7 @@ ui.exportBtn.addEventListener('click', exportVideo);
 ui.resolution.addEventListener('change', () => { setCanvasResolution(); requestRender(); });
 ui.previewQuality.addEventListener('change', () => { setCanvasResolution(); requestRender(); });
 ui.fkuPresetBtn.addEventListener('click', applyFkuPreset);
+ui.applyPresetBtn.addEventListener('click', () => applyNamedPreset(ui.presetSelect.value));
 
 Object.entries(outputs).forEach(([key]) => {
   if (ui[key] && key !== 'brushSize') {
@@ -1153,7 +1478,7 @@ document.querySelectorAll('.color-chip').forEach((button) => {
 
 ui.saveProjectBtn.addEventListener('click', () => {
   const blob = new Blob([JSON.stringify(collectProject(), null, 2)], { type: 'application/json' });
-  downloadBlob(blob, 'Kazu-Beat-FX-v3-Projeto.json');
+  downloadBlob(blob, 'Kazu-Beat-FX-v4-Projeto.json');
 });
 
 ui.projectInput.addEventListener('change', async (event) => {
@@ -1206,7 +1531,7 @@ window.addEventListener('pagehide', () => {
 });
 
 try {
-  const saved = JSON.parse(localStorage.getItem('kazuBeatFxSettingsV30'));
+  const saved = JSON.parse(localStorage.getItem('kazuBeatFxSettingsV40') || localStorage.getItem('kazuBeatFxSettingsV30'));
   if (saved?.settings) applySettings(saved.settings);
 } catch (_) {}
 
@@ -1217,7 +1542,7 @@ enableProjectControls();
 requestRender();
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-  navigator.serviceWorker.register('./service-worker.js?v=3.0.0').catch(() => {});
+  navigator.serviceWorker.register('./service-worker.js?v=4.0.0').catch(() => {});
 }
 
 if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.matchMedia('(display-mode: standalone)').matches) {

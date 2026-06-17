@@ -1,9 +1,9 @@
-const CACHE = 'kazu-beat-fx-v3.0.0';
+const CACHE = 'kazu-beat-fx-v4.0.0';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=3.0.0',
-  './app.js?v=3.0.0',
+  './styles.css?v=4.0.0',
+  './app.js?v=4.0.0',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
